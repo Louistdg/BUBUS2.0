@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>INVEST-AI — Marchés en direct</title>
+  <link rel="stylesheet" href="/assets/market-dashboard.css">
+  <script src="/assets/market-dashboard.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="INVEST-AI accueil"><span class="brand-mark">I</span><span>INVEST<span class="brand-accent">AI</span></span></a>
+    <div class="top-meta"><span class="mode-pill"><i></i> DONNÉES RÉELLES · LECTURE SEULE</span><span class="profile"><span class="avatar">L</span><span>Tableau de bord marchés</span></span></div>
+  </header>
+  <main class="dashboard">
+    <section class="panel coingecko-overview-panel" aria-labelledby="coingecko-overview-title">
+      <div class="section-title"><div><span class="eyebrow">MARCHÉ GLOBAL · COINGECKO</span><h1 id="coingecko-overview-title">Jusqu’à 250 cryptos</h1></div><span id="coingecko-overview-badge" class="status-badge">CHARGEMENT</span></div>
+      <p class="intro">Vue agrégée de tout le marché, classée par capitalisation. Cotations publiques réelles en dollars US; elles peuvent différer des prix d’achat d’une plateforme.</p>
+      <div class="overview-toolbar"><label for="coingecko-overview-search">Rechercher une crypto</label><input id="coingecko-overview-search" type="search" placeholder="Bitcoin, BTC, Ethereum…" autocomplete="off"><button id="coingecko-overview-refresh" class="secondary-button" type="button" disabled>Chargement…</button><span id="coingecko-overview-count" class="provider-note">Chargement de CoinGecko…</span></div>
+      <div class="quote-wrap overview-table-wrap"><table><thead><tr><th>#</th><th>Crypto</th><th>Prix USD</th><th>Variation 24 h</th><th>Capitalisation USD</th><th>Heure du cours (UTC)</th></tr></thead><tbody id="coingecko-overview-rows"><tr><td colspan="6" class="empty">Récupération des cotations réelles CoinGecko…</td></tr></tbody></table></div>
+      <p id="coingecko-overview-updated" class="provider-note"><a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer">Données fournies par CoinGecko</a> · cotations affichées avec leur horodatage fournisseur · actualisation manuelle limitée à une fois par minute · aucune clé ni inscription.</p>
+    </section>
+
+    <section class="panel crypto-overview-panel" aria-labelledby="crypto-overview-title">
+      <div class="section-title"><div><span class="eyebrow">CRYPTO · CRYPTO.COM EXCHANGE</span><h1 id="crypto-overview-title">Cryptomonnaies</h1></div><span id="crypto-overview-badge" class="status-badge">CHARGEMENT</span></div>
+      <p class="intro">Paires spot réelles, triées par volume d’échange. Actualisation automatique toutes les 15 secondes · aucune clé ni compte requis.</p>
+      <div class="overview-toolbar"><label for="crypto-overview-search">Rechercher une crypto</label><input id="crypto-overview-search" type="search" placeholder="BTC, ETH, SOL…" autocomplete="off"><span id="crypto-overview-count" class="provider-note">Chargement de la liste…</span></div>
+      <div class="quote-wrap overview-table-wrap"><table><thead><tr><th>Paire</th><th>Dernier prix</th><th>Variation 24 h</th><th>Volume 24 h USD</th><th>Heure du cours (UTC)</th></tr></thead><tbody id="crypto-overview-rows"><tr><td colspan="5" class="empty">Récupération des marchés publics Crypto.com…</td></tr></tbody></table></div>
+      <p id="crypto-overview-updated" class="provider-note">Source : Crypto.com Exchange · données temporaires en mémoire · lecture seule.</p>
+    </section>
+
+    <section class="panel stocks-overview-panel" aria-labelledby="stocks-overview-title">
+      <div class="section-title"><div><span class="eyebrow">ACTIONS · LISTE MONDIALE</span><h2 id="stocks-overview-title">Grandes actions à suivre</h2></div><span class="status-badge">TRADINGVIEW</span></div>
+      <p class="intro">Apple, Microsoft, NVIDIA, Amazon, Alphabet, Meta, Tesla, ASML et d’autres, regroupées par secteur.</p>
+      <p class="rights-note">Les widgets gratuits TradingView affichent les actions avec un délai défini par les bourses. Ils ne fournissent pas un flux actions temps réel à intégrer. Crypto et Forex peuvent être temps réel dans leurs widgets.</p>
+      <div class="stock-widget"><div class="tradingview-widget-container"><div class="tradingview-widget-container__widget"></div><div class="tradingview-widget-copyright"><a href="https://www.tradingview.com/markets/stocks-usa/" rel="noopener nofollow" target="_blank">Marchés mondiaux</a> · données fournies par TradingView</div><script type="application/json" class="tradingview-widget-config">{"title":"Grandes actions","tabs":[{"title":"Technologie","symbols":[{"s":"NASDAQ:AAPL","d":"Apple"},{"s":"NASDAQ:MSFT","d":"Microsoft"},{"s":"NASDAQ:NVDA","d":"NVIDIA"},{"s":"NASDAQ:AMZN","d":"Amazon"},{"s":"NASDAQ:GOOGL","d":"Alphabet"},{"s":"NASDAQ:META","d":"Meta"},{"s":"NASDAQ:TSLA","d":"Tesla"},{"s":"NASDAQ:AVGO","d":"Broadcom"},{"s":"NASDAQ:AMD","d":"AMD"},{"s":"NASDAQ:PLTR","d":"Palantir"},{"s":"NASDAQ:INTC","d":"Intel"},{"s":"NASDAQ:CSCO","d":"Cisco"}]},{"title":"Europe","symbols":[{"s":"EURONEXT:ASML","d":"ASML"},{"s":"EURONEXT:MC","d":"LVMH"},{"s":"XETR:SAP","d":"SAP"},{"s":"EURONEXT:OR","d":"L'Oréal"},{"s":"EURONEXT:AI","d":"Air Liquide"},{"s":"EURONEXT:SU","d":"Schneider Electric"},{"s":"EURONEXT:SAN","d":"Sanofi"},{"s":"EURONEXT:BNP","d":"BNP Paribas"}]},{"title":"Finance & santé","symbols":[{"s":"NYSE:JPM","d":"JPMorgan"},{"s":"NYSE:V","d":"Visa"},{"s":"NYSE:MA","d":"Mastercard"},{"s":"NYSE:LLY","d":"Eli Lilly"},{"s":"NYSE:JNJ","d":"Johnson & Johnson"},{"s":"NYSE:WMT","d":"Walmart"},{"s":"NYSE:BRK.B","d":"Berkshire Hathaway"},{"s":"NYSE:KO","d":"Coca-Cola"}]}],"width":"100%","height":"100%","showChart":false,"showFloatingTooltip":false,"locale":"fr","showSymbolLogo":true,"colorTheme":"dark"}</script></div></div>
+    </section>
+
+    <section class="panel market-panel" aria-labelledby="market-title">
+      <div class="section-title"><div><span class="eyebrow">COURS DE MARCHÉ</span><h1 id="market-title">Marchés connectés</h1></div><span id="market-badge" class="status-badge">NON CONNECTÉ</span></div>
+      <p class="intro">Connecte un fournisseur de données réel. Les cours sont affichés avec leur heure source et leur provenance ; aucune valeur fictive ni simulation n’est utilisée.</p>
+      <form id="market-connect-form" class="market-form" autocomplete="off">
+        <div class="field"><label for="market-provider">Source de cours</label><select id="market-provider"><option value="cryptocom" selected>Crypto.com Exchange · public sans clé · cryptos</option><option value="twelvedata">Twelve Data · plusieurs marchés</option></select></div>
+        <div id="market-api-key-field" class="field" hidden><label for="market-api-key">Clé API Twelve Data</label><input id="market-api-key" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="256" placeholder="Ta clé API personnelle"></div>
+        <div class="field"><label for="market-symbols">Instruments à suivre (8 maximum)</label><input id="market-symbols" type="text" maxlength="300" required placeholder="Ex. BTC_USDT, ETH_USDT"><small id="market-provider-help">Cours Crypto.com Exchange · aucune clé API ni clé de compte · paires crypto disponibles sur l’Exchange.</small></div>
+        <div class="actions"><button id="market-connect" class="primary-button" type="submit">Connecter le flux réel</button><button id="market-disconnect" class="secondary-button" type="button" disabled>Déconnecter</button></div>
+      </form>
+      <p class="rights-note">Crypto.com utilise son flux public de marché et ne demande pas de clé de compte. La couverture dépend des paires listées sur Exchange. Twelve Data couvre d’autres marchés selon l’abonnement et les droits d’affichage. ProRealTime Web affiche ses cours sur son site, mais ne fournit pas de connexion publique à INVEST-AI ; son export DDE est réservé à ProRealTime Software/Trading sur Windows. Aucune source n’envoie d’ordre.</p>
+      <div id="market-status" class="status-line" aria-live="polite">Aucune connexion lancée · aucun cours demandé.</div>
+      <div class="quote-wrap"><table><thead><tr><th>Instrument</th><th>Dernier cours</th><th>Type / place</th><th>Heure fournisseur</th><th>Reçu ici</th><th>Source</th></tr></thead><tbody id="market-quotes"><tr><td colspan="6" class="empty">Connecte le flux pour afficher les cours disponibles.</td></tr></tbody></table></div>
+      <p class="provider-note">Les timestamps sont conservés par valeur. « Reçu ici » indique l’arrivée chez INVEST-AI ; l’écart entre les deux permet de voir la fraîcheur réelle du flux.</p>
+    </section>
+
+    <section class="panel portfolio-panel" aria-labelledby="portfolio-title">
+      <div class="section-title"><div><span class="eyebrow">COMPTES RÉELS</span><h2 id="portfolio-title">Portefeuilles connectés</h2></div><span class="status-badge">LECTURE SEULE</span></div>
+      <p class="intro">Les comptes restent séparés des cours de marché. Les clés sont demandées uniquement après ton clic et ne sont pas enregistrées.</p>
+      <div class="portfolio-grid">
+        <section class="source-card" aria-labelledby="crypto-title">
+          <h3 id="crypto-title">Crypto.com Exchange</h3>
+      <p>Utilise une clé Exchange « Can Read / Lecture ». Tu peux demander son enregistrement dans le coffre Windows après une lecture réussie; aucun solde n’est chargé automatiquement.</p>
+      <form id="cryptocom-read-form" class="credentials-form" autocomplete="off">
+        <label for="cryptocom-api-key">Clé API complète</label><input id="cryptocom-api-key" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="256" required>
+        <label for="cryptocom-api-secret">Secret de cette clé</label><input id="cryptocom-api-secret" type="password" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="512" required>
+        <label class="remember-option" for="cryptocom-remember-credentials"><input id="cryptocom-remember-credentials" type="checkbox"><span>Enregistrer cette clé en sécurité dans Windows après lecture réussie</span></label>
+        <button id="cryptocom-read-button" class="primary-button" type="submit">Lire soldes et positions</button>
+      </form>
+      <div id="cryptocom-saved-controls" class="saved-controls" hidden><button id="cryptocom-refresh-saved" class="secondary-button" type="button">Lire / actualiser le portefeuille</button><button id="cryptocom-forget-saved" class="secondary-button" type="button">Oublier la clé enregistrée</button></div>
+      <p id="cryptocom-saved-status" class="provider-note" aria-live="polite"></p>
+          <div id="cryptocom-status" class="status-line" aria-live="polite">Aucune lecture demandée.</div>
+          <div id="crypto-dashboard-status" class="provider-note"></div>
+          <div class="data-grid"><div><h4>Soldes par actif</h4><div id="crypto-dashboard-balances" class="data-list"><p class="empty">Aucun relevé chargé.</p></div></div><div><h4>Positions dérivées</h4><div id="crypto-dashboard-positions" class="data-list"><p class="empty">Aucun relevé chargé.</p></div></div></div>
+          <p id="crypto-dashboard-provenance" class="provenance"></p>
+        </section>
+        <section class="source-card" aria-labelledby="ibkr-title">
+          <h3 id="ibkr-title">Interactive Brokers</h3>
+          <p>Lecture via ton Gateway local authentifié. La découverte démarre seulement après ton clic.</p>
+          <div class="ibkr-controls"><button id="broker-list-accounts" class="secondary-button" type="button" disabled>Découvrir les comptes</button><label for="broker-account-select">Compte à lire</label><select id="broker-account-select" disabled><option value="">Aucun compte chargé</option></select><button id="broker-import-account" class="primary-button" type="button" disabled>Lire ce compte</button></div>
+          <div id="broker-portfolio-status" class="status-line" aria-live="polite">Gateway local non configuré.</div>
+          <div id="broker-portfolio-result" class="data-list"><p class="empty">Aucune lecture demandée.</p></div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <footer><span>INVEST-AI</span><span>Données de marché et comptes · lecture seule · aucun ordre</span><span>Local</span></footer>
+</body>
+</html>

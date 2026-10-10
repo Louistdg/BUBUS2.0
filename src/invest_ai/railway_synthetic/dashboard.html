@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INVEST-AI — Prototype synthétique</title>
+  <style>
+    :root { color-scheme: light; font: 16px/1.5 system-ui, sans-serif; background: #f2f5f7; color: #18232d; }
+    body { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    header { background: #17324d; color: white; padding: 1.25rem; border-radius: 12px; }
+    .flag { display: inline-block; background: #ffd55a; color: #2d2300; padding: .35rem .65rem; border-radius: 6px; font-weight: 800; }
+    section { background: white; margin-top: 1rem; padding: 1rem; border-radius: 10px; }
+    li { margin: .4rem 0; }
+    #state { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="flag">SYNTHETIC ONLY / SIMULATION</span>
+    <h1>Prototype de consultation</h1>
+    <p>Aucune donnée opérationnelle. Aucun statut affiché ici n’autorise une action.</p>
+  </header>
+  <section aria-live="polite">
+    <h2>État du flux synthétique</h2>
+    <p id="state">UNKNOWN — en attente d’une réponse serveur</p>
+    <p id="details"></p>
+  </section>
+  <section>
+    <h2>Missions de démonstration</h2>
+    <ul id="missions"><li>Indisponible tant que la projection n’est pas joignable.</li></ul>
+  </section>
+  <script>
+    async function refreshSyntheticDashboard() {
+      try {
+        const health = await fetch('/api/v1/synthetic/health', { cache: 'no-store', credentials: 'same-origin' });
+        if (!health.ok) throw new Error('unavailable');
+        const h = await health.json();
+        document.querySelector('#state').textContent = `${h.sync_state} — SIMULATION`;
+        document.querySelector('#details').textContent = `Séquence ${h.snapshot_sequence ?? 'inconnue'} · âge ${h.age_seconds ?? 'inconnu'} s · source d’autorité ${h.source_authority}`;
+        if (h.sync_state !== 'FRESH') {
+          document.querySelector('#missions').replaceChildren();
+          return;
+        }
+        const response = await fetch('/api/v1/synthetic/missions?limit=25', { cache: 'no-store', credentials: 'same-origin' });
+        if (!response.ok) throw new Error('unavailable');
+        const data = await response.json();
+        if (data.sync_state !== 'FRESH' || data.snapshot_sequence !== h.snapshot_sequence || data.snapshot_hash !== h.snapshot_hash) {
+          document.querySelector('#state').textContent = 'UNKNOWN — snapshot incohérent, actualisation requise';
+          document.querySelector('#missions').replaceChildren();
+          return;
+        }
+        const list = document.querySelector('#missions');
+        list.replaceChildren();
+        for (const mission of data.items) {
+          const item = document.createElement('li');
+          item.textContent = `${mission.title} — ${mission.demo_status}`;
+          list.append(item);
+        }
+      } catch {
+        document.querySelector('#state').textContent = 'UNAVAILABLE — dernière donnée non vérifiable';
+        document.querySelector('#missions').replaceChildren();
+      }
+    }
+    refreshSyntheticDashboard();
+    window.setInterval(refreshSyntheticDashboard, 30000);
+  </script>
+</body>
+</html>

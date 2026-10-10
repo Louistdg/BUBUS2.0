@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>INVEST-AI — Suivi local</title>
+  <link rel="stylesheet" href="/assets/dashboard.css">
+  <script src="/assets/dashboard.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">INVEST-AI · LOCAL</p>
+      <h1>Suivi du projet</h1>
+      <p class="subtitle">État lu directement dans le Coordination Core et le Knowledge Core.</p>
+    </div>
+    <div class="refresh-area">
+      <span id="updated-at" class="updated">Chargement…</span>
+      <button id="refresh" type="button">Actualiser</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="legend panel" aria-label="Légende des statuts">
+      <div><span class="badge green">GREEN</span><span>Verdict de coordination : démarrage autorisé selon les dépendances, claims et ressources enregistrés.</span></div>
+      <div><span class="badge validated">VALIDATED</span><span>Statut de mission accordé par le LEAD. C’est une validation distincte de GREEN.</span></div>
+      <div><span class="badge yellow">YELLOW</span><span>À examiner ou ressource non confirmée.</span></div>
+      <div><span class="badge red">RED</span><span>Bloqué par le registre de coordination.</span></div>
+    </section>
+
+    <section id="error" class="error panel" hidden role="alert"></section>
+
+    <section class="summary-grid" aria-label="Résumé">
+      <article class="panel summary-card"><span class="metric-label">Missions suivies</span><strong id="mission-count">—</strong></article>
+      <article class="panel summary-card"><span class="metric-label">Alertes de coordination</span><strong id="alert-count">—</strong></article>
+      <article class="panel summary-card"><span class="metric-label">Documents Knowledge Core</span><strong id="knowledge-count">—</strong><small id="knowledge-detail"></small></article>
+    </section>
+
+    <section>
+      <div class="section-heading"><div><p class="eyebrow">ÉQUIPES</p><h2>Les cinq CODEX</h2></div></div>
+      <div id="agents" class="agent-grid"></div>
+    </section>
+
+    <section>
+      <div class="section-heading"><div><p class="eyebrow">À SURVEILLER</p><h2>Alertes</h2></div></div>
+      <div id="alerts" class="panel list-panel"></div>
+    </section>
+
+    <section>
+      <div class="section-heading"><div><p class="eyebrow">RÉFÉRENCES DOCUMENTAIRES</p><h2>Rapports enregistrés</h2><p class="section-note">Seuls les fichiers Markdown référencés par le Coordination Core et situés dans handoffs/ sont listés. Leur contenu n’est pas affiché.</p></div></div>
+      <div id="reports" class="panel list-panel"></div>
+    </section>
+
+    <footer>Interface locale en lecture seule · aucun accès aux données de marché, au portefeuille, au broker, au Gateway ou à l’exécution financière.</footer>
+  </main>
+</body>
+</html>

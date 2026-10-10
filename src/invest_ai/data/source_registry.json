@@ -1,0 +1,95 @@
+{
+  "registry_version": "1",
+  "reviewed_at": "2026-10-07T00:00:00Z",
+  "sources": {
+    "gleif": {
+      "source_id": "gleif",
+      "status": "GREEN",
+      "terms_url": "https://www.gleif.org/en/meta/lei-data-terms-of-use/",
+      "terms_id": "GLEIF_LEI_CC0_1_0",
+      "raw_archive_allowed": true,
+      "commercial_use": true,
+      "attribution_required": false,
+      "third_party_exclusions": [],
+      "notes": "LEI and LE-RD data under CC0 1.0. Do not imply GLEIF endorsement or use its marks."
+    },
+    "sec": {
+      "source_id": "sec",
+      "status": "GREEN",
+      "terms_url": "https://www.sec.gov/about/webmaster-frequently-asked-questions",
+      "terms_id": "SEC_EDGAR_PUBLIC_FILINGS_REUSE_FAIR_ACCESS",
+      "raw_archive_allowed": true,
+      "commercial_use": true,
+      "attribution_required": false,
+      "third_party_exclusions": ["Embedded content with separately identified rights; SEC FAQ says these are rare."],
+      "notes": "Public government-created and EDGAR filing content may be reused. Obey current fair access policy, identify User-Agent, and do not treat accepted time as public availability."
+    },
+    "ecb": {
+      "source_id": "ecb",
+      "status": "GREEN",
+      "terms_url": "https://www.ecb.europa.eu/stats/ecb_statistics/governance_and_quality_framework/html/usage_policy.en.html",
+      "terms_id": "ESCB_PUBLIC_STATISTICS_REUSE_WITH_THIRD_PARTY_EXCLUSION",
+      "raw_archive_allowed": true,
+      "commercial_use": true,
+      "attribution_required": true,
+      "third_party_exclusions": ["Third-party data without prior permission is excluded."],
+      "approved_series": ["EXR:D.USD.EUR.SP00.A"],
+      "notes": "Archive only publicly released ESCB statistics in standard form; cite source, preserve values and metadata unchanged, reject third-party data unless separately licensed."
+    },
+    "eurostat": {
+      "source_id": "eurostat",
+      "status": "YELLOW",
+      "terms_url": "https://ec.europa.eu/eurostat/fr/help/copyright-notice",
+      "terms_id": "EUROSTAT_DATASET_ALLOWLIST_REQUIRED",
+      "raw_archive_allowed": false,
+      "commercial_use": false,
+      "attribution_required": true,
+      "third_party_exclusions": ["Dataset-specific exceptions and third-party data require review."],
+      "notes": "Disabled in this prototype. Enable only through a dataset-specific reviewed allowlist."
+    },
+    "fred": {
+      "source_id": "fred",
+      "status": "RED",
+      "terms_url": "https://fred.stlouisfed.org/legal/",
+      "terms_id": "LEAD_BLOCKED_FRED_API_ARCHIVE_AND_AI_TERMS",
+      "raw_archive_allowed": false,
+      "commercial_use": false,
+      "attribution_required": true,
+      "third_party_exclusions": ["Series-specific owner rights and restrictions."],
+      "notes": "Blocked by INVEST-AI-LEAD decision in START-HERE.md. Do not enable without explicit written authorization and new LEAD decision."
+    },
+    "alfred": {
+      "source_id": "alfred",
+      "status": "RED",
+      "terms_url": "https://fred.stlouisfed.org/legal/",
+      "terms_id": "LEAD_BLOCKED_FRED_API_ARCHIVE_AND_AI_TERMS",
+      "raw_archive_allowed": false,
+      "commercial_use": false,
+      "attribution_required": true,
+      "third_party_exclusions": ["Series-specific owner rights and restrictions."],
+      "notes": "Blocked by INVEST-AI-LEAD decision in START-HERE.md. Do not enable without explicit written authorization and new LEAD decision."
+    },
+    "nbb": {
+      "source_id": "nbb",
+      "status": "YELLOW",
+      "terms_url": "https://www.nbb.be/fr/statistiques/themes/generalites/base-de-donnees-en-ligne",
+      "terms_id": "NBBSTAT_NONCOMMERCIAL_DEFAULT",
+      "raw_archive_allowed": false,
+      "commercial_use": false,
+      "attribution_required": true,
+      "third_party_exclusions": ["Dataset-specific source restrictions."],
+      "notes": "Disabled pending written clarification for commercial use and revision retention."
+    },
+    "esap": {
+      "source_id": "esap",
+      "status": "NOT_PUBLIC_YET",
+      "terms_url": "https://www.esma.europa.eu/esmas-activities/data/european-single-access-point-esap",
+      "terms_id": "ESAP_PUBLIC_ACCESS_EXPECTED_2027_07",
+      "raw_archive_allowed": false,
+      "commercial_use": false,
+      "attribution_required": true,
+      "third_party_exclusions": [],
+      "notes": "Public access is expected by July 2027; no public ESAP adapter in this mission."
+    }
+  }
+}

@@ -1,0 +1,2 @@
+# Optional read-only Twelve Data WebSocket connection for the local dashboard.
+websocket-client==1.9.2

@@ -1,0 +1,18 @@
+# Safe defaults. No credentials or real-account settings belong in this file.
+
+[runtime]
+mode = "RESEARCH" # Allowed: RESEARCH, BACKTEST, PAPER. LIVE is unsupported.
+
+[health]
+stale_after_seconds = 120
+
+[jobs]
+lease_seconds = 300
+max_attempts = 5
+retry_base_seconds = 2
+retry_max_seconds = 300
+
+[logging]
+level = "INFO"
+max_bytes = 1048576
+backup_count = 5

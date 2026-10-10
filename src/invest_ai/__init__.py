@@ -1,0 +1,1 @@
+"""INVEST-AI local foundations."""
