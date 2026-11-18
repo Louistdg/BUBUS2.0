@@ -9,9 +9,10 @@ la discussion avec l'IA. Elle ne voit pas le portefeuille et ne passe aucun ordr
 Dans le service BUBUS sur Railway :
 
 - **Commande de démarrage** (Settings, Deploy, Start Command) :
-  `PYTHONPATH=src python -m bubus.cloud_preview`
-- **Domaine public** (Settings, Networking) : génère un domaine en `https://…`.
-  Railway fournit le HTTPS, que BUBUS exige.
+  `python -m bubus.cloud_preview`, avec la variable `PYTHONPATH` = `src`.
+- **Vérification de santé** (Settings, Deploy, Healthcheck Path) : `/healthz`.
+- **Domaine public** (Settings, Networking) : génère un domaine en `https://…`
+  sur le port 8080. Railway fournit le HTTPS, que BUBUS exige.
 
 ## 2. Variables d'environnement
 
@@ -20,6 +21,7 @@ ni dans un message.
 
 | Variable | Obligatoire | Rôle |
 |---|---|---|
+| `PYTHONPATH` | oui | `src`, pour que Python trouve le code de BUBUS. |
 | `BUBUS_PREVIEW_USERNAME` | oui | Ton identifiant de connexion. |
 | `BUBUS_PREVIEW_PASSWORD` | oui | Ton mot de passe, **24 caractères minimum**. Le changer déconnecte tous les appareils. |
 | `ANTHROPIC_API_KEY` | pour Claude | Clé API Claude (console.anthropic.com), dédiée à BUBUS. |
