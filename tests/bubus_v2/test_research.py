@@ -74,13 +74,16 @@ class ResearchSimulationTests(unittest.TestCase):
         candles[85] = {"timestamp": 86 * 3_600_000, "o": "200", "h": "201",
                        "l": "199", "c": "200", "v": "1000"}
 
+        # Window [51h, 87h) = bars 50..85: it differs from the default 30 % split
+        # and ends right after the jump, so later flat bars must be ignored.
         result = compare_candles(candles, commission_bps=0, slippage_bps=0,
-                                 evaluation_start_ms=85 * 3_600_000,
-                                 evaluation_end_ms=121 * 3_600_000)
+                                 evaluation_start_ms=51 * 3_600_000,
+                                 evaluation_end_ms=87 * 3_600_000)
 
         buy_hold = self.by_id(result, "buy_hold")
-        self.assertEqual(result["training_bars"], 84)
+        self.assertEqual(result["training_bars"], 50)
         self.assertEqual(result["test_bars"], 36)
+        self.assertEqual(result["last_timestamp"], 86 * 3_600_000)
         self.assertEqual(buy_hold["test_return_percent"], "100.00")
 
     def test_historical_breakout_parameters_are_explicit_and_reported(self) -> None:

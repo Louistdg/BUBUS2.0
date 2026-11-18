@@ -21,8 +21,8 @@ def compare_candles(candles: object, *, commission_bps: object = None, slippage_
                     test_percent: object = 30, timeframe: str = "1h",
                     evaluation_start_ms: int | None = None,
                     evaluation_end_ms: int | None = None,
-                    breakout_lookback: int = 3,
-                    relative_volume_multiple: Decimal | str = Decimal("2")) -> dict[str, object]:
+                    breakout_lookback: int = 10,
+                    relative_volume_multiple: Decimal | str = Decimal("1.5")) -> dict[str, object]:
     """Compare research rules over contiguous candles with explicit time splits.
 
     The capital is a normalized index (1 unit), never a user balance or order size.
@@ -41,6 +41,16 @@ def compare_candles(candles: object, *, commission_bps: object = None, slippage_
                           "1h": 365 * 24, "4h": 365 * 6, "1D": 365}
     if not isinstance(timeframe, str) or timeframe not in annualization_bars:
         raise ResearchError("Période de bougies non prise en charge.")
+    if type(breakout_lookback) is not int or not 2 <= breakout_lookback <= 500:
+        raise ResearchError("La fenêtre de cassure doit être un entier entre 2 et 500 bougies.")
+    try:
+        volume_multiple = Decimal(str(relative_volume_multiple))
+    except ArithmeticError:
+        volume_multiple = Decimal("NaN")
+    if not volume_multiple.is_finite() or not Decimal(0) < volume_multiple <= Decimal(100):
+        raise ResearchError("Le multiple de volume doit être compris entre 0 (exclu) et 100.")
+    bar_ms = {"5m": 300_000, "15m": 900_000, "1h": 3_600_000,
+              "4h": 14_400_000, "1D": 86_400_000}[timeframe]
     bars = []
     prior = 0
     for row in candles:
@@ -55,11 +65,28 @@ def compare_candles(candles: object, *, commission_bps: object = None, slippage_
                 raise ValueError()
         except (KeyError, TypeError, ValueError, ArithmeticError):
             raise ResearchError("Les bougies reçues sont incomplètes, désordonnées ou invalides.") from None
+        if bars and stamp - prior != bar_ms:
+            raise ResearchError("La série de bougies contient des trous : une série continue est "
+                                "exigée, aucune bougie manquante n'est comblée.")
         prior = stamp
         bars.append({"timestamp": stamp, **values})
 
-    test_count = max(3, len(bars) * test_percent // 100)
-    split = len(bars) - test_count
+    if evaluation_start_ms is None and evaluation_end_ms is None:
+        test_count = max(3, len(bars) * test_percent // 100)
+        split = len(bars) - test_count
+    else:
+        # Explicit window [start, end): earlier bars are signal context only,
+        # later bars are discarded so they cannot influence the evaluation.
+        start = bars[0]["timestamp"] if evaluation_start_ms is None else evaluation_start_ms
+        end = bars[-1]["timestamp"] + bar_ms if evaluation_end_ms is None else evaluation_end_ms
+        if type(start) is not int or type(end) is not int or start >= end:
+            raise ResearchError("La fenêtre d'évaluation doit avoir un début antérieur à sa fin.")
+        split = next((i for i, bar in enumerate(bars) if bar["timestamp"] >= start), len(bars))
+        stop = next((i for i, bar in enumerate(bars) if bar["timestamp"] >= end), len(bars))
+        bars = bars[:stop]
+        test_count = stop - split
+        if test_count < 3:
+            raise ResearchError("La fenêtre d'évaluation doit contenir au moins trois bougies.")
     if split < 3:
         raise ResearchError("Il faut au moins trois bougies avant la période de test.")
     folds = []
@@ -77,7 +104,7 @@ def compare_candles(candles: object, *, commission_bps: object = None, slippage_
         "sma_cross": lambda history, held: len(history) >= 10 and
             sum((x["c"] for x in history[-3:]), Decimal(0)) / 3 >
             sum((x["c"] for x in history[-10:]), Decimal(0)) / 10,
-        "breakout": lambda history, held: _breakout(history, held),
+        "breakout": lambda history, held: _breakout(history, held, breakout_lookback, volume_multiple),
     }
     results = []
     for strategy_id, target in strategies.items():
@@ -193,19 +220,22 @@ def compare_candles(candles: object, *, commission_bps: object = None, slippage_
             "exposure_percent": _percent(Decimal(invested) / Decimal(test_count)), "folds": folds_out})
     return {"provider": "Crypto.com Exchange", "timeframe": timeframe, "first_timestamp": bars[0]["timestamp"],
         "last_timestamp": bars[-1]["timestamp"], "bars": len(bars), "training_bars": split,
-        "test_bars": test_count, "test_percent": test_percent, "commission_bps": fee, "slippage_bps": slip,
+        "test_bars": test_count, "test_percent": test_percent,
+        "breakout_parameters": {"lookback_bars": breakout_lookback,
+                                "relative_volume_multiple": str(volume_multiple)}, "commission_bps": fee, "slippage_bps": slip,
         "fill_rule": "signal at candle close, modeled fill at next candle open",
         "notice": "Research-only historical estimate. Normalized capital index; no portfolio, signal, recommendation, or order authority.",
         "results": results, "orders_enabled": False, "execution_allowed": False}
 
 
-def _breakout(history: list[dict[str, object]], held: bool) -> bool:
-    if len(history) < 11: return False
+def _breakout(history: list[dict[str, object]], held: bool, lookback: int, volume_multiple: Decimal) -> bool:
+    if len(history) < lookback + 1: return False
     current = history[-1]
-    prior = history[-11:-1]
+    prior = history[-lookback - 1:-1]
     prior_low = min(x["l"] for x in prior)
     if held: return current["c"] >= prior_low
-    return current["c"] > max(x["h"] for x in prior) and current["v"] >= sum(x["v"] for x in prior) / 10 * Decimal("1.5")
+    average_volume = sum((x["v"] for x in prior), Decimal(0)) / lookback
+    return current["c"] > max(x["h"] for x in prior) and current["v"] >= average_volume * volume_multiple
 
 
 def _percent(value: Decimal) -> str:

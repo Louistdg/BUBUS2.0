@@ -392,7 +392,8 @@ class DeskTests(unittest.TestCase):
         self.assertFalse(result["orders_enabled"])
         self.assertFalse(result["execution_allowed"])
         self.assertIn("Normalized capital index", result["notice"])
-        daily = compare_candles(candles, commission_bps=10, slippage_bps=5, test_percent=30, timeframe="1D")
+        daily_candles = [dict(row, timestamp=(i + 1) * 86400000) for i, row in enumerate(candles)]
+        daily = compare_candles(daily_candles, commission_bps=10, slippage_bps=5, test_percent=30, timeframe="1D")
         daily_buy_hold = next(row for row in daily["results"] if row["id"] == "buy_hold")
         hourly_buy_hold = next(row for row in result["results"] if row["id"] == "buy_hold")
         self.assertIsNotNone(daily_buy_hold["annualized_volatility_percent"])
@@ -414,7 +415,7 @@ class DeskTests(unittest.TestCase):
         class Candles:
             def get(self, symbol, timeframe):
                 self.request = (symbol, timeframe)
-                return {"candles": [{"timestamp": (i + 1) * 60000, "o": "10", "h": "11",
+                return {"candles": [{"timestamp": (i + 1) * 3600000, "o": "10", "h": "11",
                     "l": "9", "c": str(10 + i / 100), "v": "100"} for i in range(60)]}
         self.server.candles = Candles()
         with urlopen(Request(self.url + "/api/desk/research?symbol=BTC_USDT")) as response:
