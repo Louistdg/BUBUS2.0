@@ -22,12 +22,13 @@
   const state = {exchange: [], restExchange: [], coingecko: [], watchlist: [], source: 'exchange', selected: null,
     period: '1h', candles: [], chartRequest: 0, refreshBusy: false, streamTimer: null,
     scanTimer: null, scanBusy: false, streamQuotes: new Map(), marketRows: new Map()};
-  const labels = {markets: 'Marchés', watchlist: 'Favoris', portfolio: 'Portefeuille',
+  const labels = {markets: 'Marchés', chat: 'Discussion', watchlist: 'Favoris', portfolio: 'Portefeuille',
     autopilot: 'Automatisation', activity: 'Activité', settings: 'Connexions'};
   const api = async (path, payload) => {
     const response = await fetch(path, {cache: 'no-store', ...(payload === undefined ? {} : {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)})});
     const result = await response.json();
+    if (response.status === 401 && result.login) { location.href = result.login; throw new Error('Connexion requise.'); }
     if (!response.ok) throw new Error(result.error || 'La demande n’a pas abouti.');
     return result;
   };
@@ -37,6 +38,72 @@
     if (className) element.className = className;
     return element;
   };
+  // --- Discussion IA (lecture seule) ---------------------------------------
+  const chat = {messages: [], busy: false, ready: false, stateLoaded: false};
+  try { const saved = JSON.parse(localStorage.getItem('bubus.chat') || '[]');
+    if (Array.isArray(saved)) chat.messages = saved.filter(m => m && (m.role === 'user' || m.role === 'assistant')
+      && typeof m.content === 'string').slice(-30); } catch {}
+  const saveChat = () => { try { localStorage.setItem('bubus.chat', JSON.stringify(chat.messages.slice(-30))); } catch {} };
+  function renderChat(pending) {
+    const log = $('chat-log');
+    if (!chat.messages.length && !pending) { log.querySelector('.chat-empty').hidden = false;
+      log.querySelectorAll('.chat-bubble').forEach(b => b.remove()); return; }
+    log.querySelector('.chat-empty').hidden = true;
+    log.querySelectorAll('.chat-bubble').forEach(b => b.remove());
+    for (const message of chat.messages) {
+      log.append(node('div', message.content, `chat-bubble ${message.role === 'user' ? 'from-user' : 'from-ai'}`));
+    }
+    if (pending) log.append(node('div', 'BUBUS réfléchit…', 'chat-bubble from-ai pending'));
+    log.scrollTop = log.scrollHeight;
+    window.scrollTo({top: document.body.scrollHeight});
+  }
+  async function loadChatState() {
+    renderChat(chat.busy);
+    if (chat.stateLoaded) return;
+    try {
+      const info = await api('/api/desk/chat');
+      chat.ready = info.ready; chat.stateLoaded = true;
+      $('chat-status').textContent = info.ready
+        ? `${info.provider} · ${info.model} · jusqu’à ${info.daily_limit} messages par jour.`
+        : `IA non configurée. ${info.reason || ''}`;
+    } catch (error) { $('chat-status').textContent = error.message; }
+    $('chat-send').disabled = !chat.ready;
+  }
+  async function sendChat(text) {
+    const content = text.trim();
+    if (!content || chat.busy) return;
+    chat.busy = true; $('chat-send').disabled = true;
+    chat.messages.push({role: 'user', content}); saveChat(); renderChat(true);
+    $('chat-input').value = ''; resizeChatInput();
+    try {
+      const result = await api('/api/desk/chat', {messages: chat.messages.slice(-12)});
+      chat.messages.push({role: 'assistant', content: result.reply}); saveChat();
+      if (typeof result.remaining_today === 'number') {
+        $('chat-status').textContent = `${result.provider} · ${result.model} · ${result.remaining_today} messages restants aujourd’hui.`;
+      }
+    } catch (error) {
+      chat.messages.pop(); saveChat(); $('chat-input').value = content; resizeChatInput();
+      toast(error.message); $('chat-status').textContent = error.message;
+    } finally {
+      chat.busy = false; $('chat-send').disabled = !chat.ready; renderChat(false);
+    }
+  }
+  function resizeChatInput() {
+    const input = $('chat-input'); input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+  }
+  $('chat-form').addEventListener('submit', event => { event.preventDefault(); sendChat($('chat-input').value); });
+  $('chat-input').addEventListener('input', resizeChatInput);
+  $('chat-input').addEventListener('keydown', event => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && window.matchMedia('(pointer: fine)').matches) {
+      event.preventDefault(); sendChat($('chat-input').value);
+    }
+  });
+  document.querySelectorAll('.chat-suggestion').forEach(button => button.addEventListener('click', () => sendChat(button.textContent)));
+  $('chat-clear').addEventListener('click', () => { chat.messages = []; saveChat(); renderChat(false); });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  }
   const feeStatus = node('p', 'Frais Spot : lecture en attente.', 'inline-status');
   feeStatus.id = 'fee-status'; $('transaction-status').after(feeStatus);
   const balanceHistoryCard = node('section', undefined, 'card history-card');
@@ -124,6 +191,7 @@
     if (name === 'portfolio') {loadSavedPortfolio(); loadSavedTransactions(); loadSavedTrades(); loadSavedBalanceHistory(); loadPortfolioValuations(); loadReconciliation(); loadPortfolioObserverState();}
     if (name === 'autopilot') { loadRiskLimits(); loadRiskReadiness(); loadOrderChainAudit(); }
     if (name === 'markets') requestAnimationFrame(drawChart);
+    if (name === 'chat') loadChatState();
   }
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => view(button.dataset.view)));
   $('connection-shortcut').addEventListener('click', () => view('settings'));
@@ -1173,4 +1241,5 @@
     state.streamTimer = setInterval(streamState, 1000); streamState();
   }
   setInterval(refreshExchange, 15000); setInterval(refreshGecko, 60000);
+
 })();

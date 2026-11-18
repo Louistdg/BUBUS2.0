@@ -1,0 +1,19 @@
+{
+  "name": "BUBUS",
+  "short_name": "BUBUS",
+  "description": "Marchés, discussion et suivi, en lecture seule.",
+  "id": "/",
+  "start_url": "/#chat",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "fr",
+  "background_color": "#0f1716",
+  "theme_color": "#1a6354",
+  "icons": [
+    {"src": "/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}

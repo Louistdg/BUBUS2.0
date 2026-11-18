@@ -7,13 +7,29 @@ Lancement Windows : `bubus.cmd`, puis http://127.0.0.1:8790/. Au premier
 démarrage, le script crée un environnement Python isolé `.venv` et installe
 `requirements.txt`; les dépendances ne sont pas ajoutées au Python global.
 
-L'aperçu Railway utilise séparément `python -m bubus.cloud_preview`. Il sert
-uniquement l'interface et les données de marché publiques derrière
-l'authentification HTTP Basic, refuse les écritures et n'expose aucune route de
-portefeuille privé, de clé ou d'ordre. Les variables `BUBUS_PREVIEW_USERNAME`
-et `BUBUS_PREVIEW_PASSWORD` sont obligatoires (mot de passe d'au moins 24
-caractères); l'accès extérieur exige HTTPS via le proxy. Le coffre Windows et
-les clés Crypto.com ne sont jamais copiés vers Railway.
+La version en ligne (Railway) utilise séparément `python -m bubus.cloud_preview`.
+Elle sert l'interface, les données de marché publiques et la discussion IA,
+derrière une page de connexion (cookie de session signé, `HttpOnly`,
+`SameSite=Strict`, `Secure` derrière HTTPS, 30 jours; essais ratés limités).
+L'en-tête HTTP Basic reste accepté pour les scripts. Elle s'installe sur Android
+comme une appli (manifeste + service worker). Elle refuse les autres écritures et
+n'expose aucune route de portefeuille privé, de clé ou d'ordre. Les variables
+`BUBUS_PREVIEW_USERNAME` et `BUBUS_PREVIEW_PASSWORD` sont obligatoires (mot de
+passe d'au moins 24 caractères); l'accès extérieur exige HTTPS via le proxy.
+Guide de mise en ligne : [docs/railway-appli-android.md](docs/railway-appli-android.md).
+
+Règle des clés sur Railway (décision de l'utilisateur du 18 novembre 2026) :
+seules des clés **dédiées à BUBUS** peuvent y aller, et uniquement dans les
+variables d'environnement Railway, jamais dans le code. Aujourd'hui, seule la
+clé de l'IA (`ANTHROPIC_API_KEY` ou `OPENAI_API_KEY`) y est utilisée. Les clés
+d'échange (Revolut X, Crypto.com) n'y iront qu'en **lecture seule**, quand la
+partie « portefeuille en ligne » sera construite. Le coffre Windows et la clé
+Crypto.com du PC ne sont jamais copiés vers Railway.
+
+La discussion IA (`src/bubus/assistant_chat.py`) n'a aucun outil : elle reçoit
+un relevé des marchés publics déjà chargés, ne voit pas le portefeuille et ne
+peut rien exécuter. Claude passe par le SDK officiel `anthropic`, OpenAI par un
+appel HTTP direct. Un plafond de messages par jour limite la dépense.
 
 Objectif : surveillance des marchés réels et trading automatique sur Crypto.com
 Exchange sous une politique financière explicitement configurée. Aucun faux cours

@@ -27,6 +27,8 @@ from bubus.live_order_journal import LiveOrderJournal, LiveOrderJournalError
 from bubus.offline_risk_reservations import OfflineRiskReservations, OfflineRiskError
 from bubus.offline_trade_transaction import OfflineTradeTransaction, OfflineTradeTransactionError
 from bubus.store import DeskStore
+from bubus.assistant_chat import ChatRequestError, ChatService, ChatUnavailable, market_snapshot
+from bubus.assistant_chat import parse_conversation as parse_conversation_bytes
 from invest_ai.data.cryptocom_market_overview import CryptoComMarketOverviewError
 from invest_ai.data.cryptocom_instruments import CryptoComInstrumentCatalog, CryptoComInstrumentCatalogError
 from invest_ai.data.cryptocom_market_readonly import CryptoComMarketDataError, CryptoComMarketEvidenceStore
@@ -90,7 +92,12 @@ class DeskHandler(MarketDashboardHandler):
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/assets/desk.css": ("desk.css", "text/css; charset=utf-8"),
                  "/assets/desk.js": ("desk.js", "text/javascript; charset=utf-8"),
-                 "/assets/icon.svg": ("icon.svg", "image/svg+xml")}
+                 "/assets/icon.svg": ("icon.svg", "image/svg+xml"),
+                 "/assets/icon-192.png": ("icon-192.png", "image/png"),
+                 "/assets/icon-512.png": ("icon-512.png", "image/png"),
+                 "/assets/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
+                 "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+                 "/sw.js": ("sw.js", "text/javascript; charset=utf-8")}
         if parts.path in files:
             name, mime = files[parts.path]
             return self._send_file(ASSETS / name, mime)
@@ -315,6 +322,8 @@ class DeskHandler(MarketDashboardHandler):
             if parts.path == "/api/desk/live-signals":
                 scan = self.server.live_signal_scanner.state(result_limit=2000)
                 return self._send_json(200, scan)
+            if parts.path == "/api/desk/chat":
+                return self._send_json(200, self.server.chat_service.state())
             return self._send_json(404, {"error": "Route inconnue."})
         if parts.path == "/api/market-data/crypto-overview":
             if not self._same_origin_read():
@@ -364,7 +373,34 @@ class DeskHandler(MarketDashboardHandler):
             return self._send_json(200, overview)
         return super().do_GET()
 
+    def _handle_chat_post(self) -> None:
+        """Discussion IA en lecture seule. L'appelant a déjà vérifié l'origine."""
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold() != "application/json":
+            return self._reject_post(415, "JSON requis.")
+        raw_length = self.headers.get("Content-Length", "")
+        if not raw_length.isdecimal() or len(raw_length) > 6 or not 1 <= int(raw_length) <= 65536:
+            return self._reject_post(413, "Conversation trop longue.")
+        try:
+            messages = parse_conversation_bytes(self.rfile.read(int(raw_length)))
+            result = self.server.chat_service.reply(messages, market_snapshot(self.server))
+        except ChatRequestError as exc:
+            return self._reject_post(400, str(exc))
+        except ChatUnavailable as exc:
+            return self._reject_post(exc.status, str(exc))
+        return self._send_json(200, result)
+
+    def _drain_body(self, limit: int = 65536) -> None:
+        """Lit le corps avant un refus pour ne pas couper la connexion (Windows)."""
+        raw_length = self.headers.get("Content-Length", "")
+        if raw_length.isdecimal() and 0 < int(raw_length) <= limit:
+            self.rfile.read(int(raw_length))
+
     def do_POST(self):
+        if urlsplit(self.path).path == "/api/desk/chat":
+            if not self._local_host() or not self._same_origin():
+                self._drain_body()
+                return self._reject_post(403, "Origine locale requise.")
+            return self._handle_chat_post()
         observer_paths = {
             "/api/cryptocom/portfolio-observer/credentials",
             "/api/cryptocom/portfolio-observer/start",
@@ -995,11 +1031,12 @@ def record_spot_portfolio_valuation_candidate(server, base_currency: str, *, per
 
 def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
                 bind_host="127.0.0.1", handler_class=DeskHandler,
-                cryptocom_observer_credential_store=None, **kwargs):
+                cryptocom_observer_credential_store=None, chat_service=None, **kwargs):
     kwargs.setdefault("cryptocom_credential_store", WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Read-only"))
     server = make_base_server(port, bind_host=bind_host, handler_class=handler_class, **kwargs)
     server.RequestHandlerClass = handler_class
+    server.chat_service = chat_service or ChatService()
     server.desk_store = DeskStore(Path(data_dir or ROOT / "data") / "desk.sqlite3")
     server.cryptocom_observer_credential_store = cryptocom_observer_credential_store or WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Observer-Can-Read")

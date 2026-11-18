@@ -206,14 +206,13 @@ class AuthenticatedCloudPreviewTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_preview_authenticates_and_exposes_only_read_only_routes(self):
-        with self.assertRaises(HTTPError) as error:
-            urlopen(self.url + "/")
-        self.assertEqual(error.exception.code, 401)
-        error.exception.close()
+        with urlopen(self.url + "/") as response:
+            self.assertTrue(response.url.endswith("/login"))
+            self.assertIn(b'name="password"', response.read())
         with urlopen(Request(self.url + "/", headers={"Authorization": self.authorization})) as response:
             html = response.read()
             self.assertIn(b"BUBUS2.0", html)
-            self.assertIn(b"APER\xc3\x87U CLOUD PROT\xc3\x89G\xc3\x89", html)
+            self.assertIn(b"BUBUS EN LIGNE", html)
         with urlopen(self.url + "/healthz") as response:
             self.assertEqual(response.read(), b"ok")
         with urlopen(Request(self.url + "/api/desk/state", headers={"Authorization": self.authorization})) as response:
