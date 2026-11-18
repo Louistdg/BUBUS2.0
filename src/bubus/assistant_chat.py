@@ -71,8 +71,8 @@ class ChatConfig:
         elif self.provider == "openai" and not self.model:
             reason = "Choisis le modèle OpenAI avec la variable BUBUS_AI_MODEL."
         else:
-            reason = ("Ajoute ANTHROPIC_API_KEY (Claude) ou OPENAI_API_KEY (OpenAI) "
-                      "dans les variables d'environnement du serveur.")
+            reason = ("L’IA n’est pas encore branchée : il faut ajouter une clé Claude (ANTHROPIC_API_KEY) "
+                      "ou ChatGPT (OPENAI_API_KEY) dans les réglages du serveur.")
         return {"ready": self.ready, "provider": labels.get(self.provider or ""),
                 "model": self.model if self.ready else None, "daily_limit": self.daily_limit,
                 "reason": reason, "orders_enabled": False}
@@ -187,17 +187,40 @@ class ChatService:
     def __init__(self, *, config_loader: Callable[[], ChatConfig] = load_config,
                  claude_call: Callable[..., str] | None = None,
                  openai_call: Callable[..., str] | None = None,
-                 quota: DailyQuota | None = None):
+                 quota: DailyQuota | None = None, chatgpt: Any | None = None):
         self._config_loader = config_loader
+        self._chatgpt = chatgpt
         self._claude_call = claude_call or _call_claude
         self._openai_call = openai_call or _call_openai
         self._quota = quota or DailyQuota()
 
+    def _use_chatgpt(self, config: ChatConfig) -> bool:
+        """Abonnement ChatGPT connecté sur ce PC : prioritaire sauf choix explicite."""
+        explicit = os.environ.get("BUBUS_AI_PROVIDER", "").strip().casefold() in {"claude", "openai"}
+        return self._chatgpt is not None and not (explicit and config.ready) and self._chatgpt.ready
+
     def state(self) -> dict[str, Any]:
-        return self._config_loader().public_state()
+        config = self._config_loader()
+        state = config.public_state()
+        if self._chatgpt is not None:
+            state["chatgpt"] = self._chatgpt.state()
+            if self._use_chatgpt(config):
+                state.update({"ready": True, "provider": "ChatGPT (ton abonnement)",
+                              "model": state["chatgpt"].get("model_name"), "reason": None})
+        return state
 
     def reply(self, messages: list[dict[str, str]], snapshot: str) -> dict[str, Any]:
         config = self._config_loader()
+        if self._use_chatgpt(config):
+            from bubus.chatgpt_signin import ChatGPTSignInError
+            remaining = self._quota.take(config.daily_limit)
+            try:
+                text = self._chatgpt.complete(system=SYSTEM_PROMPT, messages=messages, snapshot=snapshot)
+            except ChatGPTSignInError as exc:
+                raise ChatUnavailable(str(exc), exc.status) from None
+            return {"reply": text, "provider": "ChatGPT (ton abonnement)",
+                    "model": self._chatgpt.state().get("model_name"), "remaining_today": remaining,
+                    "orders_enabled": False}
         if not config.ready:
             raise ChatUnavailable(config.public_state()["reason"])
         remaining = self._quota.take(config.daily_limit)

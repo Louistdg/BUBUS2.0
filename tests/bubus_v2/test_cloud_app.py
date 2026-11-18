@@ -179,7 +179,9 @@ class CloudInstallableAppTests(_ServerCase):
 
     def test_private_routes_stay_closed_after_login(self):
         cookie = self.session_cookie()
-        for path in ("/api/desk/portfolio", "/api/cryptocom/portfolio/import", "/api/desk/activity"):
+        self.assertIsNone(self.server.chatgpt_signin)
+        for path in ("/api/desk/portfolio", "/api/cryptocom/portfolio/import", "/api/desk/activity",
+                     "/api/desk/chatgpt", "/auth/callback"):
             status, _, _ = self.request("GET", path, headers={"Cookie": cookie})
             self.assertEqual(status, 404, path)
         status, _, _ = self.request("POST", "/api/desk/watchlist", b"{}", {

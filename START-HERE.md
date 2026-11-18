@@ -31,6 +31,14 @@ un relevé des marchés publics déjà chargés, ne voit pas le portefeuille et 
 peut rien exécuter. Claude passe par le SDK officiel `anthropic`, OpenAI par un
 appel HTTP direct. Un plafond de messages par jour limite la dépense.
 
+Version PC uniquement : bouton « Continuer avec ChatGPT » (`src/bubus/chatgpt_signin.py`),
+flux « open source / local » d'OpenAI (enregistrement `dynamic_agent_client`,
+PKCE, retour sur `http://127.0.0.1:<port>/auth/callback`). Il utilise l'abonnement
+ChatGPT Plus ou Pro sans clé. Les jetons sont chiffrés par Windows (DPAPI) dans
+`data/chatgpt-session.bin` et ne quittent jamais le PC. Ce flux n'est pas
+disponible sur Railway : OpenAI réserve les applis hébergées à ses partenaires
+(formulaire d'intérêt). La version en ligne n'expose aucune de ces routes.
+
 Objectif : surveillance des marchés réels et trading automatique sur Crypto.com
 Exchange sous une politique financière explicitement configurée. Aucun faux cours
 ni portefeuille de démonstration dans l'interface.

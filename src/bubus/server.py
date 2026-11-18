@@ -29,6 +29,8 @@ from bubus.offline_trade_transaction import OfflineTradeTransaction, OfflineTrad
 from bubus.store import DeskStore
 from bubus.assistant_chat import ChatRequestError, ChatService, ChatUnavailable, market_snapshot
 from bubus.assistant_chat import parse_conversation as parse_conversation_bytes
+from bubus.chatgpt_signin import CALLBACK_PATH as CHATGPT_CALLBACK_PATH, ChatGPTSignIn, ChatGPTSignInError
+import html as html_lib
 from invest_ai.data.cryptocom_market_overview import CryptoComMarketOverviewError
 from invest_ai.data.cryptocom_instruments import CryptoComInstrumentCatalog, CryptoComInstrumentCatalogError
 from invest_ai.data.cryptocom_market_readonly import CryptoComMarketDataError, CryptoComMarketEvidenceStore
@@ -101,6 +103,25 @@ class DeskHandler(MarketDashboardHandler):
         if parts.path in files:
             name, mime = files[parts.path]
             return self._send_file(ASSETS / name, mime)
+        if parts.path == CHATGPT_CALLBACK_PATH and getattr(self.server, "chatgpt_signin", None) is not None:
+            query = {k: v[0] for k, v in parse_qs(parts.query, max_num_fields=8).items() if v}
+            try:
+                self.server.chatgpt_signin.finish(query)
+                title, text = "ChatGPT connecté", "Ton abonnement ChatGPT est branché sur BUBUS. Tu peux fermer cette fenêtre."
+            except ChatGPTSignInError as exc:
+                title, text = "Connexion ChatGPT impossible", str(exc)
+            body = ('<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" '
+                    'content="width=device-width,initial-scale=1"><title>BUBUS · ChatGPT</title>'
+                    '<body style="font-family:system-ui;background:#0f1716;color:#eef4f2;padding:32px;line-height:1.6">'
+                    f'<h1>{html_lib.escape(title)}</h1><p>{html_lib.escape(text)}</p>'
+                    '<p><a style="color:#7fd4b5" href="/#chat">Revenir à la discussion</a></p></body></html>').encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self._security_headers()
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parts.path.startswith("/api/desk/"):
             if not self._same_origin_read():
                 return self._send_json(403, {"error": "Origine locale requise."})
@@ -324,6 +345,8 @@ class DeskHandler(MarketDashboardHandler):
                 return self._send_json(200, scan)
             if parts.path == "/api/desk/chat":
                 return self._send_json(200, self.server.chat_service.state())
+            if parts.path == "/api/desk/chatgpt" and getattr(self.server, "chatgpt_signin", None) is not None:
+                return self._send_json(200, self.server.chatgpt_signin.state())
             return self._send_json(404, {"error": "Route inconnue."})
         if parts.path == "/api/market-data/crypto-overview":
             if not self._same_origin_read():
@@ -401,6 +424,20 @@ class DeskHandler(MarketDashboardHandler):
                 self._drain_body()
                 return self._reject_post(403, "Origine locale requise.")
             return self._handle_chat_post()
+        if urlsplit(self.path).path in {"/api/desk/chatgpt/connect", "/api/desk/chatgpt/disconnect"}:
+            self._drain_body(4096)
+            if not self._local_host() or not self._same_origin():
+                return self._reject_post(403, "Origine locale requise.")
+            signin = getattr(self.server, "chatgpt_signin", None)
+            if signin is None:
+                return self._reject_post(404, "Connexion ChatGPT indisponible ici.")
+            try:
+                if urlsplit(self.path).path.endswith("/connect"):
+                    return self._send_json(200, {"authorize_url": signin.start(self.server.server_port)})
+                signin.disconnect()
+                return self._send_json(200, signin.state())
+            except ChatGPTSignInError as exc:
+                return self._reject_post(exc.status, str(exc))
         observer_paths = {
             "/api/cryptocom/portfolio-observer/credentials",
             "/api/cryptocom/portfolio-observer/start",
@@ -1031,12 +1068,17 @@ def record_spot_portfolio_valuation_candidate(server, base_currency: str, *, per
 
 def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
                 bind_host="127.0.0.1", handler_class=DeskHandler,
-                cryptocom_observer_credential_store=None, chat_service=None, **kwargs):
+                cryptocom_observer_credential_store=None, chat_service=None, chatgpt_signin=None,
+                **kwargs):
     kwargs.setdefault("cryptocom_credential_store", WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Read-only"))
     server = make_base_server(port, bind_host=bind_host, handler_class=handler_class, **kwargs)
     server.RequestHandlerClass = handler_class
-    server.chat_service = chat_service or ChatService()
+    server.chatgpt_signin = chatgpt_signin
+    if chatgpt_signin is None and handler_class is DeskHandler:
+        # Version PC uniquement : jetons chiffrés par Windows dans le dossier de données local.
+        server.chatgpt_signin = ChatGPTSignIn(Path(data_dir or ROOT / "data"))
+    server.chat_service = chat_service or ChatService(chatgpt=server.chatgpt_signin)
     server.desk_store = DeskStore(Path(data_dir or ROOT / "data") / "desk.sqlite3")
     server.cryptocom_observer_credential_store = cryptocom_observer_credential_store or WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Observer-Can-Read")

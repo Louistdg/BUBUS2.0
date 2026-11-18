@@ -231,3 +231,24 @@
   .chat-bubble{max-width:92%}
 }
 body[data-mode="cloud"] .local-indicator,body[data-mode="cloud"] .sidebar-bottom .system-card{display:none}
+.chatgpt-box{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 14px;border:1px solid var(--line);border-radius:12px}
+.chatgpt-box .microcopy{flex-basis:100%;margin-top:0!important}
+.chatgpt-button{background:#000;color:#fff;border:1px solid #000;border-radius:999px;padding:10px 18px;font-size:13px}
+.chatgpt-line{font-size:12px;font-weight:600}
+/* --- Finitions téléphone --- */
+body[data-mode="cloud"] .live-signal-panel{display:none}
+@media(max-width:600px){
+  .cloud-preview-banner{padding:6px 12px;font-size:9.5px;gap:8px;flex-wrap:nowrap;justify-content:space-between;text-align:left}
+  .cloud-preview-banner button{padding:3px 9px;font-size:10px;white-space:nowrap}
+  .table-scroll table{min-width:0}
+  .table-scroll th:nth-child(5),.table-scroll td:nth-child(5),.table-scroll th:nth-child(6),.table-scroll td:nth-child(6){display:none}
+  .table-scroll td,.table-scroll th{padding:12px 8px}
+  .favorite-col{width:28px;padding-left:10px!important}
+  .market-identity small{display:none}
+  .market-identity .mini-coin{width:26px;height:26px;font-size:8px}
+  .table-scroll td.number{font-size:12px;white-space:nowrap}
+  #view-chat .page-heading{margin-bottom:12px}
+  #view-chat .page-heading .subtitle,#view-chat .page-heading .outline-tag{display:none}
+  #view-chat h1{font-size:22px}
+}
+@media(max-width:600px){.table-scroll{max-height:62vh}}

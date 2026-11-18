@@ -65,9 +65,54 @@
       chat.ready = info.ready; chat.stateLoaded = true;
       $('chat-status').textContent = info.ready
         ? `${info.provider} · ${info.model} · jusqu’à ${info.daily_limit} messages par jour.`
-        : `IA non configurée. ${info.reason || ''}`;
+        : (info.reason || 'L’IA n’est pas encore branchée.');
+      if (!info.ready && info.chatgpt && info.chatgpt.available && document.body.dataset.mode !== 'cloud') {
+        $('chat-status').textContent = 'Branche ton abonnement ChatGPT avec le bouton ci-dessous pour commencer.';
+      }
+      renderChatGPT(info.chatgpt);
     } catch (error) { $('chat-status').textContent = error.message; }
     $('chat-send').disabled = !chat.ready;
+  }
+  function renderChatGPT(info) {
+    const box = $('chatgpt-box');
+    box.replaceChildren();
+    if (!info || !info.available || document.body.dataset.mode === 'cloud') { box.hidden = true; return; }
+    box.hidden = false;
+    if (!info.signed_in || !info.plan_enabled) {
+      const button = node('button', 'Continuer avec ChatGPT', 'button chatgpt-button');
+      button.type = 'button';
+      button.addEventListener('click', connectChatGPT);
+      box.append(button, node('p', info.signed_in
+        ? 'Ton compte est connecté, mais l’utilisation de ton abonnement n’a pas été autorisée. Reconnecte-toi et accepte.'
+        : 'Utilise ton abonnement ChatGPT Plus ou Pro, sans clé et sans frais en plus. La connexion reste sur ce PC.', 'microcopy'));
+      return;
+    }
+    const line = node('p', `Abonnement ChatGPT utilisé${info.email ? ` · ${info.email}` : ''}${info.model_name ? ` · ${info.model_name}` : ''}`, 'chatgpt-line');
+    const manage = node('a', 'Gérer l’utilisation', 'text-link');
+    manage.href = info.usage_url; manage.target = '_blank'; manage.rel = 'noopener noreferrer';
+    const out = node('button', 'Déconnecter ChatGPT', 'text-link');
+    out.type = 'button';
+    out.addEventListener('click', async () => {
+      try { renderChatGPT(await api('/api/desk/chatgpt/disconnect', {})); chat.stateLoaded = false; loadChatState(); }
+      catch (error) { toast(error.message); }
+    });
+    box.append(line, manage, out);
+  }
+  async function connectChatGPT() {
+    try {
+      const {authorize_url: url} = await api('/api/desk/chatgpt/connect', {});
+      window.open(url, '_blank', 'noopener');
+      $('chat-status').textContent = 'Connecte-toi dans la fenêtre ChatGPT qui vient de s’ouvrir, puis reviens ici.';
+      const started = Date.now();
+      const poll = setInterval(async () => {
+        try {
+          const info = await api('/api/desk/chatgpt');
+          if ((info.signed_in && info.plan_enabled) || Date.now() - started > 300000) {
+            clearInterval(poll); chat.stateLoaded = false; loadChatState();
+          }
+        } catch { clearInterval(poll); }
+      }, 3000);
+    } catch (error) { toast(error.message); }
   }
   async function sendChat(text) {
     const content = text.trim();
