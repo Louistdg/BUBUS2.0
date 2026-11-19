@@ -1,4 +1,4 @@
-"""Discussion libre avec une IA (Claude ou OpenAI), en lecture seule.
+"""Discussion libre avec une IA (Claude, OpenAI ou OpenRouter), en lecture seule.
 
 L'IA reçoit un relevé des marchés publics déjà chargés par BUBUS2.0 et répond
 en français. Elle n'a aucun outil : elle ne peut ni lire de clé, ni passer
@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
+DEFAULT_OPENROUTER_MODEL = "openrouter/free"
+PROVIDER_LABELS = {"claude": "Claude (Anthropic)", "openai": "OpenAI", "openrouter": "OpenRouter"}
 MAX_HISTORY_MESSAGES = 12
 MAX_MESSAGE_CHARS = 4000
 MAX_REQUEST_BYTES = 64 * 1024
@@ -65,15 +67,15 @@ class ChatConfig:
         return bool(self.provider and self.model and self.api_key)
 
     def public_state(self) -> dict[str, Any]:
-        labels = {"claude": "Claude (Anthropic)", "openai": "OpenAI"}
         if self.ready:
             reason = None
+        elif self.provider == "openrouter":
+            reason = "Ajoute ta clé OpenRouter dans la variable OPENROUTER_API_KEY du serveur."
         elif self.provider == "openai" and not self.model:
             reason = "Choisis le modèle OpenAI avec la variable BUBUS_AI_MODEL."
         else:
-            reason = ("L’IA n’est pas encore branchée : il faut ajouter une clé Claude (ANTHROPIC_API_KEY) "
-                      "ou ChatGPT (OPENAI_API_KEY) dans les réglages du serveur.")
-        return {"ready": self.ready, "provider": labels.get(self.provider or ""),
+            reason = "Ajoute une clé OpenRouter, Claude ou OpenAI dans les réglages du serveur."
+        return {"ready": self.ready, "provider": PROVIDER_LABELS.get(self.provider or ""),
                 "model": self.model if self.ready else None, "daily_limit": self.daily_limit,
                 "reason": reason, "orders_enabled": False}
 
@@ -81,21 +83,20 @@ class ChatConfig:
 def load_config(environ: dict[str, str] | None = None) -> ChatConfig:
     env = os.environ if environ is None else environ
     choice = env.get("BUBUS_AI_PROVIDER", "").strip().casefold()
-    claude_key = env.get("ANTHROPIC_API_KEY", "").strip()
-    openai_key = env.get("OPENAI_API_KEY", "").strip()
-    if choice not in {"claude", "openai"}:
-        choice = "claude" if claude_key else ("openai" if openai_key else "")
+    keys = {"claude": env.get("ANTHROPIC_API_KEY", "").strip(),
+            "openai": env.get("OPENAI_API_KEY", "").strip(),
+            "openrouter": env.get("OPENROUTER_API_KEY", "").strip()}
+    if choice not in keys:
+        choice = next((provider for provider, key in keys.items() if key), "")
     try:
         limit = int(env.get("BUBUS_AI_DAILY_MESSAGE_LIMIT", str(DEFAULT_DAILY_LIMIT)))
     except ValueError:
         limit = DEFAULT_DAILY_LIMIT
     limit = max(0, min(limit, 1000))
     model = env.get("BUBUS_AI_MODEL", "").strip() or None
-    if choice == "claude":
-        return ChatConfig("claude", model or DEFAULT_CLAUDE_MODEL, claude_key or None, limit)
-    if choice == "openai":
-        return ChatConfig("openai", model, openai_key or None, limit)
-    return ChatConfig(None, None, None, limit)
+    defaults = {"claude": DEFAULT_CLAUDE_MODEL, "openrouter": DEFAULT_OPENROUTER_MODEL}
+    return ChatConfig(choice or None, (model or defaults.get(choice)) if choice else None,
+                      keys.get(choice) or None, limit)
 
 
 class DailyQuota:
@@ -191,12 +192,12 @@ class ChatService:
         self._config_loader = config_loader
         self._chatgpt = chatgpt
         self._claude_call = claude_call or _call_claude
-        self._openai_call = openai_call or _call_openai
+        self._openai_call = openai_call or _call_chat_completions
         self._quota = quota or DailyQuota()
 
     def _use_chatgpt(self, config: ChatConfig) -> bool:
         """Abonnement ChatGPT connecté sur ce PC : prioritaire sauf choix explicite."""
-        explicit = os.environ.get("BUBUS_AI_PROVIDER", "").strip().casefold() in {"claude", "openai"}
+        explicit = os.environ.get("BUBUS_AI_PROVIDER", "").strip().casefold() in PROVIDER_LABELS
         return self._chatgpt is not None and not (explicit and config.ready) and self._chatgpt.ready
 
     def state(self) -> dict[str, Any]:
@@ -263,27 +264,34 @@ def _call_claude(*, config: ChatConfig, system: str, messages: list[dict[str, st
     return text or "Je n'ai pas de réponse à donner. Reformule ta question."
 
 
-def _call_openai(*, config: ChatConfig, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
+def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
+    endpoints = {"openai": "https://api.openai.com/v1/chat/completions",
+                 "openrouter": "https://openrouter.ai/api/v1/chat/completions"}
+    name = PROVIDER_LABELS[config.provider]
     api_messages = [{"role": "system", "content": system}] + [dict(m) for m in messages[:-1]]
     api_messages.append({"role": "user", "content": snapshot + "\n\n" + messages[-1]["content"]})
     body = json.dumps({"model": config.model, "messages": api_messages}).encode("utf-8")
-    request = urllib.request.Request("https://api.openai.com/v1/chat/completions", data=body, method="POST",
-                                     headers={"Authorization": f"Bearer {config.api_key}",
-                                              "Content-Type": "application/json"})
+    request = urllib.request.Request(endpoints[config.provider], data=body, method="POST",
+                                     headers={"Content-Type": "application/json"})
+    request.add_unredirected_header("Authorization", f"Bearer {config.api_key}")
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as exc:
         exc.close()
         if exc.code == 401:
-            raise ChatUnavailable("La clé OpenAI est refusée. Vérifie OPENAI_API_KEY.") from None
+            raise ChatUnavailable(f"La clé {name} est refusée. Vérifie {config.provider.upper()}_API_KEY.") from None
+        if exc.code == 402 and config.provider == "openrouter":
+            raise ChatUnavailable("Le crédit OpenRouter disponible est insuffisant pour ce modèle.", 402) from None
         if exc.code == 429:
-            raise ChatUnavailable("OpenAI est saturé ou la limite de dépense est atteinte. Réessaie plus tard.", 429) from None
-        raise ChatUnavailable(f"OpenAI a renvoyé une erreur ({exc.code}). Réessaie plus tard.", 502) from None
+            raise ChatUnavailable(f"{name} a atteint sa limite de demandes. Réessaie plus tard.", 429) from None
+        raise ChatUnavailable(f"{name} a renvoyé une erreur ({exc.code}). Réessaie plus tard.", 502) from None
     except (urllib.error.URLError, TimeoutError, ValueError):
-        raise ChatUnavailable("Impossible de joindre OpenAI pour le moment.", 502) from None
+        raise ChatUnavailable(f"Impossible de joindre {name} pour le moment.", 502) from None
     try:
-        text = payload["choices"][0]["message"]["content"] or ""
+        text = payload["choices"][0]["message"]["content"]
+        if not isinstance(text, str):
+            raise TypeError
     except (KeyError, IndexError, TypeError):
-        raise ChatUnavailable("Réponse OpenAI illisible.", 502) from None
+        raise ChatUnavailable(f"Réponse {name} illisible.", 502) from None
     return text.strip() or "Je n'ai pas de réponse à donner. Reformule ta question."

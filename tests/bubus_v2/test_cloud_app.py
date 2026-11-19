@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import os
 import tempfile
@@ -9,6 +10,7 @@ import threading
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
+from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlsplit
 
 from bubus import cloud_preview
@@ -349,6 +351,31 @@ class ChatServiceTests(unittest.TestCase):
         with self.assertRaises(ChatUnavailable):
             service.reply([{"role": "user", "content": "Salut"}], "relevé")
         self.assertEqual(call.calls, [])
+
+    def test_openrouter_key_alone_sends_chat_to_openrouter(self):
+        config = load_config({"OPENROUTER_API_KEY": "router-test"})
+        service = ChatService(config_loader=lambda: config)
+        self.assertEqual(service.state()["model"], "openrouter/free")
+        response = io.BytesIO(json.dumps({"choices": [{"message": {"content": "Bonjour"}}]}).encode())
+        with patch("urllib.request.urlopen", return_value=response) as send:
+            result = service.reply([{"role": "user", "content": "Salut"}], "Relevé de test")
+        request = send.call_args.args[0]
+        self.assertEqual(request.full_url, "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(request.get_header("Authorization"), "Bearer router-test")
+        self.assertIn("Relevé de test", json.loads(request.data)["messages"][-1]["content"])
+        self.assertEqual((result["provider"], result["reply"]), ("OpenRouter", "Bonjour"))
+        self.assertNotIn("router-test", json.dumps([service.state(), result]))
+
+    def test_explicit_openrouter_uses_its_own_key_and_reports_refused_credentials(self):
+        settings = {"OPENAI_API_KEY": "other-test", "BUBUS_AI_PROVIDER": "openrouter",
+                    "BUBUS_AI_MODEL": "example/model"}
+        self.assertFalse(load_config(settings).ready)
+        config = load_config({**settings, "OPENROUTER_API_KEY": "router-test"})
+        self.assertEqual((config.model, config.api_key), ("example/model", "router-test"))
+        service = ChatService(config_loader=lambda: config)
+        error = HTTPError("https://openrouter.ai", 401, "Unauthorized", {}, io.BytesIO())
+        with patch("urllib.request.urlopen", side_effect=error), self.assertRaisesRegex(ChatUnavailable, "OPENROUTER_API_KEY"):
+            service.reply([{"role": "user", "content": "Salut"}], "")
 
     def test_daily_quota_resets_each_day(self):
         days = iter([datetime(2026, 11, 18, tzinfo=timezone.utc)] * 3 + [datetime(2026, 11, 19, tzinfo=timezone.utc)])
