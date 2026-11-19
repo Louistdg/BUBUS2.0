@@ -25,6 +25,7 @@ class CoinGeckoMarketOverviewTests(unittest.TestCase):
     def test_parses_real_market_fields_and_includes_required_attribution(self):
         data = [
             {"id": "bitcoin", "symbol": "btc", "name": "Bitcoin", "current_price": 60000.1,
+             "image": "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png?123",
              "market_cap": 1000000, "market_cap_rank": 1, "total_volume": 500,
              "price_change_percentage_24h": -0.42, "last_updated": "2026-10-09T20:00:00Z"},
             {"id": "bad coin", "symbol": "bad", "name": "Bad", "current_price": 1,
@@ -44,6 +45,7 @@ class CoinGeckoMarketOverviewTests(unittest.TestCase):
         self.assertEqual(result["markets"][0]["id"], "bitcoin")
         self.assertEqual(result["markets"][0]["symbol"], "BTC")
         self.assertEqual(result["markets"][0]["price_usd"], "60000.1")
+        self.assertEqual(result["markets"][0]["image_url"], data[0]["image"])
         self.assertEqual(result["markets"][0]["change_24h_pct"], "-0.42")
         self.assertEqual(result["attribution_text"], "Données fournies par CoinGecko")
         self.assertFalse(result["persistent"])
@@ -91,6 +93,20 @@ class CoinGeckoMarketOverviewTests(unittest.TestCase):
         self.assertIn("per_page=250", calls[0])
         self.assertEqual(result["count"], 250)
         self.assertEqual(result["markets"][-1]["market_cap_rank"], 250)
+
+    def test_missing_or_untrusted_logo_does_not_remove_a_market(self):
+        urls = (None, "http://assets.coingecko.com/coins/images/1/bitcoin.png",
+                "https://coin-images.coingecko.com.evil.example/coins/images/1/bitcoin.png",
+                "https://assets.coingecko.com@evil.example/coins/images/1/bitcoin.png")
+        for url in urls:
+            with self.subTest(url=url):
+                body = json.dumps([{
+                    "id": "bitcoin", "symbol": "btc", "name": "Bitcoin", "current_price": 2,
+                    "market_cap": 2, "market_cap_rank": 1, "total_volume": 1,
+                    "last_updated": "2026-10-09T20:00:00Z", "image": url,
+                }]).encode()
+                client = CoinGeckoMarketOverview(opener=lambda *_args, **_kwargs: FakeResponse(body))
+                self.assertIsNone(client.get_overview()["markets"][0]["image_url"])
 
     def test_rejects_malformed_and_non_list_responses(self):
         for body in (b"not json", b'{"error":"rate limit"}', b"null"):

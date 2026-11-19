@@ -9,6 +9,7 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Protocol
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 
@@ -16,6 +17,7 @@ _MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&o
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _CACHE_SECONDS = 60
 _MAX_MARKETS = 250
+_IMAGE_HOSTS = {'coin-images.coingecko.com', 'assets.coingecko.com'}
 _COIN_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,127}\Z")
 _SYMBOL = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}\Z", re.IGNORECASE)
 
@@ -100,6 +102,7 @@ class CoinGeckoMarketOverview:
                     "id": coin_id,
                     "symbol": symbol.upper(),
                     "name": name.strip(),
+                    "image_url": self._image_url(row.get("image")),
                     "price_usd": str(price),
                     "market_cap_usd": str(market_cap),
                     "market_cap_rank": rank,
@@ -136,6 +139,21 @@ class CoinGeckoMarketOverview:
             self._cached = snapshot
             self._cache_until = self._clock() + _CACHE_SECONDS
             return snapshot
+
+    @staticmethod
+    def _image_url(value: object) -> str | None:
+        if not isinstance(value, str) or len(value) > 1024:
+            return None
+        if any(character.isspace() or ord(character) < 32 for character in value):
+            return None
+        try:
+            url = urlsplit(value)
+        except ValueError:
+            return None
+        if (url.scheme != "https" or url.netloc not in _IMAGE_HOSTS
+                or not url.path.startswith(("/coins/images/", "/assets/"))):
+            return None
+        return value
 
     @staticmethod
     def _decimal(value: object, *, positive: bool) -> Decimal:

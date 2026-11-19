@@ -379,6 +379,19 @@
       favorite.append(star); row.append(favorite);
       const identityCell = node('td'); const identity = node('div', undefined, 'market-identity');
       const coin = node('span', market.symbol.split('_')[0].slice(0, 3), 'mini-coin');
+      coin.setAttribute('aria-hidden', 'true');
+      if (market.image_url) {
+        const logo = node('img', undefined, 'market-logo');
+        logo.alt = '';
+        logo.width = logo.height = 29;
+        logo.loading = 'lazy';
+        logo.decoding = 'async';
+        logo.referrerPolicy = 'no-referrer';
+        logo.addEventListener('load', () => coin.classList.add('has-logo'), {once: true});
+        logo.addEventListener('error', () => logo.remove(), {once: true});
+        logo.src = market.image_url;
+        coin.append(logo);
+      }
       const description = node('div'); description.append(node('strong', market.name || market.symbol.replace('_', ' / ')),
         node('small', exchange ? 'Crypto.com Exchange' : market.symbol));
       if (exchange) {

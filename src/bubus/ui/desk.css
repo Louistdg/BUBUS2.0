@@ -432,3 +432,19 @@ body, button, input, select, textarea {font-family:Inter,"Segoe UI",system-ui,sa
   #equity-quotes article {grid-template-columns:minmax(0,1fr) auto}
   #equity-quotes article small {grid-column:1 / -1}
 }
+
+.market-identity .mini-coin {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+.market-identity .market-logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  visibility: hidden;
+}
+.market-identity .has-logo .market-logo { visibility: visible; }
+.market-identity .has-logo { color: transparent; background: transparent; }
