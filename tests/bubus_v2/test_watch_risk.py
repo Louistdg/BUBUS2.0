@@ -8,7 +8,9 @@ import unittest
 from pathlib import Path
 
 from bubus.store import DeskStore
-from bubus.watch_risk import WatchRisk, WatchRiskError, risk_profile, yahoo_daily, yahoo_search
+from bubus.watch_risk import (
+    WatchRisk, WatchRiskError, risk_profile, yahoo_crypto_daily, yahoo_crypto_symbol, yahoo_daily, yahoo_search,
+)
 from tests.bubus_v2.test_cloud_app import _ServerCase
 
 
@@ -68,10 +70,12 @@ class YahooParsingTests(unittest.TestCase):
         self.assertEqual((data["closes"], data["currency"], data["name"]), ([380.0, 390.0], "EUR", "LVMH"))
         self.assertIn("/MC.PA?", seen[0])
         search = {"quotes": [{"symbol": "MC.PA", "quoteType": "EQUITY", "longname": "LVMH", "exchDisp": "Paris"},
-                             {"symbol": "BTC-USD", "quoteType": "CRYPTOCURRENCY"},
+                             {"symbol": "BTC-USD", "quoteType": "CRYPTOCURRENCY", "shortname": "Bitcoin USD"},
+                             {"symbol": "BTC-JPY", "quoteType": "CRYPTOCURRENCY"},
                              {"symbol": "bad symbol!", "quoteType": "EQUITY"}]}
         found = yahoo_search("lvmh", opener=lambda *_a, **_k: FakeResponse(search))
-        self.assertEqual(found, [{"kind": "action", "symbol": "MC.PA", "name": "LVMH", "place": "Paris"}])
+        self.assertEqual(found, [{"kind": "action", "symbol": "MC.PA", "name": "LVMH", "place": "Paris"},
+                                 {"kind": "crypto", "symbol": "BTC_USD", "name": "Bitcoin", "place": "Crypto"}])
 
 
 class WatchRiskServiceTests(unittest.TestCase):
@@ -97,12 +101,19 @@ class WatchRiskServiceTests(unittest.TestCase):
         self.assertIn("Cours indisponible", failed["error"])
         self.assertNotIn("score", failed)
 
-    def test_crypto_uses_crypto_com_candles(self):
-        candles = {"candles": [{"c": str(price)} for price in wave(0.03)]}
-        service = WatchRisk(crypto_candles=lambda symbol: candles)
-        result = service.describe("crypto", "BTC_USD")
-        self.assertEqual((result["source"], result["currency"], result["name"]), ("Crypto.com", "USD", "BTC"))
+    def test_crypto_prices_come_from_yahoo(self):
+        seen = []
+        chart = {"chart": {"result": [{"meta": {"currency": "USD", "longName": "Bitcoin USD"},
+                                       "indicators": {"quote": [{"close": wave(0.03)}]}}]}}
+        service = WatchRisk(crypto_daily=lambda symbol: yahoo_crypto_daily(
+            symbol, opener=lambda request, **_: seen.append(request.full_url) or FakeResponse(chart)))
+        result = service.describe("crypto", "BTC_USDT", "BTC")
+        self.assertEqual((result["source"], result["currency"], result["name"]), ("Yahoo Finance", "USD", "BTC"))
+        self.assertIn("/BTC-USD?", seen[0])
         self.assertIn(result["score"], range(1, 6))
+        self.assertEqual(yahoo_crypto_symbol("ETH_EUR"), "ETH-EUR")
+        with self.assertRaises(WatchRiskError):
+            yahoo_crypto_symbol("ETH_BTC")
 
     def test_search_needs_two_letters_and_explains_failures(self):
         service = WatchRisk(searcher=lambda text: (_ for _ in ()).throw(OSError()))

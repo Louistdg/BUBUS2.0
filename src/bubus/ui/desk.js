@@ -19,7 +19,7 @@
     applyTheme(selected);
     try { localStorage.setItem('bubus.theme', selected); } catch {}
   }));
-  const state = {exchange: [], restExchange: [], coingecko: [], watchlist: [], source: 'exchange', selected: null,
+  const state = {exchange: [], restExchange: [], coingecko: [], watchlist: [], source: 'coingecko', selected: null,
     period: '1h', candles: [], chartRequest: 0, refreshBusy: false, streamTimer: null,
     scanTimer: null, scanBusy: false, streamQuotes: new Map(), marketRows: new Map()};
   const labels = {markets: 'Marchés', chat: 'Discussion', watchlist: 'Ma liste', portfolio: 'Portefeuille',
@@ -77,9 +77,9 @@
         ? `${info.provider} · ${info.model} · jusqu’à ${info.daily_limit} messages par jour.`
         : (info.reason || 'L’IA n’est pas encore branchée.');
       if (!info.ready && info.chatgpt?.available && !info.chatgpt.signed_in) {
-        $('chat-status').textContent = 'Branche ton abonnement ChatGPT avec le bouton ci-dessous pour commencer.';
+        $('chat-status').textContent = 'Pour commencer, branche ton abonnement ChatGPT ou colle ta clé OpenRouter ci-dessous.';
       }
-      renderChatGPT(info.chatgpt);
+      renderChatGPT(info.chatgpt); renderOpenRouter(info);
     } catch (error) { $('chat-status').textContent = error.message; }
     $('chat-send').disabled = !chat.ready;
   }
@@ -93,6 +93,7 @@
       button.type = 'button';
       button.disabled = true;
       box.append(button, node('p', 'La connexion de ton compte sera disponible dès que BUBUS sera activé auprès d’OpenAI.', 'microcopy'));
+      if (!chat.ready) box.append(node('p', 'En attendant, pour que l’IA réponde ici : dans Railway, onglet Variables, ajoute OPENROUTER_API_KEY avec ta clé OpenRouter (elle commence par sk-or-). L’appli redémarre toute seule.', 'microcopy'));
       return;
     }
     if (!info || !info.available) { box.hidden = true; return; }
@@ -117,6 +118,42 @@
       catch (error) { toast(error.message); }
     });
     box.append(line, manage, out);
+  }
+  function renderOpenRouter(info) {
+    const box = $('openrouter-box'); box.replaceChildren();
+    const keys = info.openrouter;
+    if (document.body.dataset.mode === 'cloud' || !keys || !keys.available) { box.hidden = true; return; }
+    box.hidden = false;
+    if (keys.saved) {
+      const forget = node('button', 'Oublier la clé', 'text-link'); forget.type = 'button';
+      forget.addEventListener('click', async () => {
+        try { await api('/api/desk/openrouter/forget', {forget: true}); toast('Clé OpenRouter oubliée.'); chat.stateLoaded = false; loadChatState(); }
+        catch (error) { toast(error.message); }
+      });
+      box.append(node('p', `Clé OpenRouter enregistrée sur ce PC · modèle ${keys.model}`, 'chatgpt-line'), forget,
+        node('p', info.provider === 'OpenRouter' ? 'C’est elle qui répond dans la discussion.' : 'Elle sert si aucune autre IA n’est branchée.', 'microcopy'));
+      return;
+    }
+    const form = node('form', undefined, 'openrouter-form'); form.autocomplete = 'off';
+    const keyLabel = node('label', 'Ta clé OpenRouter');
+    const key = node('input'); key.type = 'password'; key.required = true; key.maxLength = 220; key.placeholder = 'sk-or-…';
+    key.autocomplete = 'off'; key.spellcheck = false; keyLabel.append(key);
+    const modelLabel = node('label', 'Modèle (facultatif)');
+    const model = node('input'); model.type = 'text'; model.maxLength = 160; model.placeholder = `${keys.default_model} (choix automatique)`;
+    model.autocomplete = 'off'; model.spellcheck = false; modelLabel.append(model);
+    const save = node('button', 'Enregistrer la clé', 'button button-green'); save.type = 'submit';
+    form.append(keyLabel, modelLabel, save);
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); save.disabled = true;
+      try {
+        await api('/api/desk/openrouter/key', {key: key.value, model: model.value});
+        key.value = ''; toast('Clé OpenRouter enregistrée dans le coffre Windows.');
+        chat.stateLoaded = false; loadChatState();
+      } catch (error) { toast(error.message); }
+      finally { save.disabled = false; }
+    });
+    box.append(node('p', 'Ou utilise OpenRouter', 'chatgpt-line'), form,
+      node('p', 'Crée une clé sur openrouter.ai (menu Keys), règle une limite de crédit, puis colle-la ici. Elle est chiffrée par Windows et ne quitte pas ce PC.', 'microcopy'));
   }
   async function connectChatGPT() {
     try {
@@ -254,7 +291,6 @@
     if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
     if (name === 'watchlist') renderWatchlist();
     if (name === 'activity') loadActivity();
-    if (name === 'portfolio') {loadSavedPortfolio(); loadSavedTransactions(); loadSavedTrades(); loadSavedBalanceHistory(); loadPortfolioValuations(); loadReconciliation(); loadPortfolioObserverState();}
     if (name === 'autopilot') { loadRiskLimits(); loadRiskReadiness(); loadOrderChainAudit(); }
     if (name === 'markets') requestAnimationFrame(drawChart);
     if (name === 'chat') loadChatState();
@@ -266,7 +302,7 @@
     timeZone: 'Europe/Brussels', hour: '2-digit', minute: '2-digit'}) + ' · Bruxelles';};
   clock(); setInterval(clock, 30000);
   function metrics() {
-    const rows = state.exchange;
+    const rows = state.coingecko;
     $('metric-count').textContent = rows.length ? rows.length.toLocaleString('fr-BE') : '—';
     $('nav-market-count').textContent = rows.length || '—';
     $('metric-up').textContent = rows.length ? rows.filter(row => Number(row.change_24h_pct) > 0).length : '—';
@@ -296,16 +332,18 @@
       const row = node('tr'); row.dataset.symbol = market.symbol;
       if (exchange && state.selected === market.symbol) row.classList.add('selected-row');
       const favorite = node('td', undefined, 'favorite-col');
-      const star = node('button', state.watchlist.includes(market.symbol) ? '★' : '☆', 'favorite-button');
-      star.classList.toggle('saved', state.watchlist.includes(market.symbol));
-      star.setAttribute('aria-label', `${state.watchlist.includes(market.symbol) ? 'Retirer' : 'Ajouter'} ${market.symbol} ${exchange ? 'des' : 'aux'} favoris`);
-      star.disabled = !exchange; star.title = exchange ? 'Favori enregistré sur ce PC' : 'Les favoris portent sur les paires Crypto.com';
-      star.addEventListener('click', event => {event.stopPropagation(); toggleWatch(market.symbol);});
+      const pair = exchange ? market.symbol : `${market.symbol}_USD`;
+      const saved = state.watchlist.includes(pair);
+      const star = node('button', saved ? '★' : '☆', 'favorite-button');
+      star.classList.toggle('saved', saved);
+      star.setAttribute('aria-label', `${saved ? 'Retirer' : 'Ajouter'} ${market.name || market.symbol} ${saved ? 'de' : 'à'} ma liste`);
+      star.title = saved ? 'Dans ta liste' : 'Ajouter à ma liste';
+      star.addEventListener('click', event => {event.stopPropagation(); toggleWatch(pair);});
       favorite.append(star); row.append(favorite);
       const identityCell = node('td'); const identity = node('div', undefined, 'market-identity');
       const coin = node('span', market.symbol.split('_')[0].slice(0, 3), 'mini-coin');
       const description = node('div'); description.append(node('strong', market.name || market.symbol.replace('_', ' / ')),
-        node('small', exchange ? 'Crypto.com Exchange' : `${market.symbol} · CoinGecko`));
+        node('small', exchange ? 'Crypto.com Exchange' : market.symbol));
       if (exchange) {
         const rules = market.instrument_rules;
         description.append(node('small', rules
@@ -319,7 +357,7 @@
       const providerTimeCell = node('td', hour(market.provider_timestamp));
       row.append(node('td', compact(market.volume_24h_usd) + ' $', 'number'), providerTimeCell);
       if (exchange) state.marketRows.set(market.symbol, {price: priceCell, providerTime: providerTimeCell});
-      row.addEventListener('click', () => {if (exchange) select(market.symbol); else toast('Prix agrégé CoinGecko. Sélectionnez une paire Crypto.com pour son historique de plateforme.');});
+      if (exchange) row.addEventListener('click', () => select(market.symbol));
       fragment.append(row);
     }
     body.append(fragment);
@@ -404,12 +442,13 @@
     try {
       const result = await api('/api/market-data/coingecko-overview');
       state.coingecko = (result.markets || []).map(coin => ({...coin, price: coin.price_usd, currency: 'USD'}));
+      $('metric-coverage').textContent = `Source : CoinGecko · ${hour(result.fetched_at)}`;
     } catch {state.coingecko = []; if (state.source === 'coingecko') toast('CoinGecko est momentanément indisponible.');}
     finally {geckoBusy = false; if (state.source === 'coingecko') renderMarkets();}
   }
   $('refresh').addEventListener('click', async () => {
     $('refresh').disabled = true;
-    try {await Promise.all([refreshExchange(), refreshGecko()]); if (state.selected) await loadChart();}
+    try {await refreshGecko(); renderMarkets();}
     finally {$('refresh').disabled = false;}
   });
   async function toggleWatch(symbol) {
@@ -547,20 +586,6 @@
       renderMarkets(); metrics(); renderWatchlist(enabled);
     } catch (error) { toast(error.message); }
   }
-  function cryptoMatches(text) {
-    const query = text.trim().toLowerCase(); if (!query) return [];
-    const wanted = new Set([query.toUpperCase()]);
-    for (const [name, code] of Object.entries(cryptoNames)) if (name.startsWith(query)) wanted.add(code);
-    const found = new Map();
-    for (const market of state.exchange) {
-      const [base, quote] = market.symbol.split('_');
-      if (!wanted.has(base) || !['USD', 'USDT', 'EUR'].includes(quote)) continue;
-      const previous = found.get(base);
-      if (!previous || (quote === 'USD' && previous.symbol.split('_')[1] !== 'USD')) found.set(base, {kind: 'crypto', symbol: market.symbol,
-        name: prettyCrypto(base), place: 'Crypto.com'});
-    }
-    return [...found.values()].slice(0, 3);
-  }
   function showResults(results, message) {
     const box = $('mylist-results'); box.replaceChildren();
     if (message) box.append(node('p', message, 'microcopy'));
@@ -579,15 +604,14 @@
     clearTimeout(myList.searchTimer);
     const text = $('mylist-search').value.trim();
     if (text.length < 2) { $('mylist-results').replaceChildren(); return; }
-    const crypto = cryptoMatches(text); showResults(crypto, 'Recherche…');
+    showResults([], 'Recherche…');
     const id = ++myList.searchId;
     myList.searchTimer = setTimeout(async () => {
       try {
         const result = await api(`/api/desk/my-list/search?q=${encodeURIComponent(text)}`);
         if (id !== myList.searchId) return;
-        const all = [...crypto, ...result.results];
-        showResults(all, all.length ? '' : 'Rien trouvé. Essaie un autre nom ou le symbole (ex. AAPL).');
-      } catch (error) { if (id === myList.searchId) showResults(crypto, error.message); }
+        showResults(result.results, result.results.length ? '' : 'Rien trouvé. Essaie un autre nom ou le symbole (ex. AAPL).');
+      } catch (error) { if (id === myList.searchId) showResults([], error.message); }
     }, 350);
   });
   $('mylist-refresh').addEventListener('click', () => renderWatchlist(true));
@@ -1394,12 +1418,8 @@
     catch (error) {toast(error.message);}
   });
   api('/api/desk/state').then(result => {state.watchlist = result.watchlist; metrics(); renderMarkets(); renderWatchlist();}).catch(error => toast(error.message));
-  setInterval(updatePortfolioCandidateAvailability, 1000);
-  setInterval(() => {if (!document.querySelector('.cloud-preview-banner')) loadPortfolioObserverState();}, 5000);
-  view(location.hash.slice(1)); vaultState(); refreshExchange(); refreshGecko();
-  if (!document.querySelector('.cloud-preview-banner')) {
-    state.streamTimer = setInterval(streamState, 1000); streamState();
-  }
-  setInterval(refreshExchange, 15000); setInterval(refreshGecko, 60000);
+  // Crypto.com est retiré : on ne lit plus ses cours, son flux direct ni le portefeuille.
+  view(location.hash.slice(1)); refreshGecko();
+  setInterval(refreshGecko, 60000);
 
 })();

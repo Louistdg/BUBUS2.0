@@ -5,8 +5,8 @@ derniers mois (agitation quotidienne et plus forte baisse). Ce n'est ni un
 conseil, ni une prévision.
 
 Sources publiques sans clé :
-- cryptos : bougies journalières Crypto.com Exchange (déjà utilisées par BUBUS) ;
-- actions : graphique journalier Yahoo Finance (service public non officiel).
+- cryptos et actions : graphique journalier Yahoo Finance (service public non
+  officiel). Une crypto « BTC_USD » est lue sous le nom Yahoo « BTC-USD ».
 """
 from __future__ import annotations
 
@@ -17,12 +17,11 @@ import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from decimal import Decimal
 from typing import Callable, Iterable
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
-from bubus.store import STOCK_SYMBOL
+from bubus.store import STOCK_SYMBOL, SYMBOL
 
 YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/"
 YAHOO_SEARCH = "https://query1.finance.yahoo.com/v1/finance/search"
@@ -106,13 +105,35 @@ def yahoo_daily(symbol: str, opener=urlopen) -> dict:
             "source": "Yahoo Finance"}
 
 
+def yahoo_crypto_symbol(symbol: str) -> str:
+    """« BTC_USD » (format BUBUS) devient « BTC-USD » (format Yahoo). USDT et USDC sont lus en USD."""
+    base, _, quote_currency = symbol.rpartition("_")
+    if not base or quote_currency not in {"USD", "USDT", "USDC", "EUR"}:
+        raise WatchRiskError("Cette crypto n’a pas de cours en USD ou en EUR.")
+    return f"{base}-{'EUR' if quote_currency == 'EUR' else 'USD'}"
+
+
+def yahoo_crypto_daily(symbol: str, opener=urlopen) -> dict:
+    return yahoo_daily(yahoo_crypto_symbol(symbol), opener)
+
+
 def yahoo_search(text: str, opener=urlopen) -> list[dict]:
     data = _get_json(YAHOO_SEARCH + "?" + urlencode({"q": text, "quotesCount": 8, "newsCount": 0}), opener)
     found = []
     for item in data.get("quotes") or []:
-        if not isinstance(item, dict) or item.get("quoteType") not in {"EQUITY", "ETF", "INDEX", "MUTUALFUND"}:
+        if not isinstance(item, dict):
             continue
         symbol = str(item.get("symbol") or "").upper()
+        if item.get("quoteType") == "CRYPTOCURRENCY":
+            base, _, quote_currency = symbol.rpartition("-")
+            pair = f"{base}_{quote_currency}"
+            if quote_currency in {"USD", "EUR"} and SYMBOL.fullmatch(pair):
+                found.append({"kind": "crypto", "symbol": pair,
+                              "name": str(item.get("shortname") or base)[:80].removesuffix(f" {quote_currency}"),
+                              "place": "Crypto"})
+            continue
+        if item.get("quoteType") not in {"EQUITY", "ETF", "INDEX", "MUTUALFUND"}:
+            continue
         if not STOCK_SYMBOL.fullmatch(symbol):
             continue
         found.append({"kind": "action", "symbol": symbol,
@@ -122,11 +143,11 @@ def yahoo_search(text: str, opener=urlopen) -> list[dict]:
 
 
 class WatchRisk:
-    def __init__(self, *, crypto_candles: Callable[[str], dict] | None = None,
+    def __init__(self, *, crypto_daily: Callable[[str], dict] = yahoo_crypto_daily,
                  stock_daily: Callable[[str], dict] = yahoo_daily,
                  searcher: Callable[[str], list[dict]] = yahoo_search,
                  clock: Callable[[], float] = time.monotonic):
-        self.crypto_candles = crypto_candles
+        self.crypto_daily = crypto_daily
         self.stock_daily = stock_daily
         self.searcher = searcher
         self.clock = clock
@@ -135,13 +156,7 @@ class WatchRisk:
 
     def _fetch(self, kind: str, symbol: str, name: str) -> dict:
         if kind == "crypto":
-            if self.crypto_candles is None:
-                raise WatchRiskError("Cours crypto indisponibles.")
-            payload = self.crypto_candles(symbol)
-            closes = [float(Decimal(row["c"])) for row in payload.get("candles", [])]
-            data = {"closes": closes, "price": closes[-1] if closes else None,
-                    "currency": symbol.rsplit("_", 1)[-1], "name": name or symbol.split("_", 1)[0],
-                    "source": "Crypto.com"}
+            data = self.crypto_daily(symbol)
         else:
             data = self.stock_daily(symbol)
         profile = risk_profile(data["closes"], kind=kind)
@@ -180,4 +195,4 @@ class WatchRisk:
         try:
             return self.searcher(text)
         except Exception:
-            raise WatchRiskError("La recherche d’actions ne répond pas. Réessaie dans un moment.") from None
+            raise WatchRiskError("La recherche ne répond pas. Réessaie dans un moment.") from None

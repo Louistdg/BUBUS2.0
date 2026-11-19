@@ -272,3 +272,13 @@ body[data-mode="cloud"] .live-signal-panel{display:none}
 .mylist-ideas{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 20px 30px}.mylist-chip{padding:9px 14px;border-radius:20px;background:var(--green-soft);color:var(--green);border:1px solid var(--line);font-size:12px;font-weight:600}
 .mylist-loading{padding:30px 20px;text-align:center;color:var(--muted);font-size:12px}.mylist-note{margin:14px 4px 0!important}
 @media(max-width:600px){.mylist-add{padding:14px}.mylist-row{grid-template-columns:minmax(0,1fr) auto 31px;padding:14px;gap:8px 10px}.mylist-who{grid-column:1/2}.mylist-risk{grid-column:2;grid-row:1}.mylist-row>.icon-button{grid-column:3;grid-row:1}.mylist-price{grid-column:1/-1}.mylist-risk{padding:4px 9px 4px 4px;font-size:10px}}
+
+.openrouter-form{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;flex-basis:100%}
+.openrouter-form label{display:grid;gap:6px;font-size:12px;font-weight:600}
+@media (max-width:760px){.openrouter-form{grid-template-columns:1fr}}
+#openrouter-box{margin-top:10px}
+
+.revolutx-card{display:flex;gap:18px;align-items:flex-start;padding:26px;max-width:860px}
+.revolutx-card>div{flex:1}
+.revolutx-mark{flex-shrink:0;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--sidebar);color:#fff;font-weight:700;font-size:20px}
+@media (max-width:600px){.revolutx-card{flex-wrap:wrap;padding:20px}}

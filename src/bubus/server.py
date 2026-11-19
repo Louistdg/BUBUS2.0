@@ -30,6 +30,7 @@ from bubus.offline_trade_transaction import OfflineTradeTransaction, OfflineTrad
 from bubus.store import DeskStore
 from bubus.assistant_chat import ChatRequestError, ChatService, ChatUnavailable, market_snapshot
 from bubus.assistant_chat import parse_conversation as parse_conversation_bytes
+from bubus.ai_keys import AIKeyError, OpenRouterKeyStore
 from bubus.chatgpt_signin import CALLBACK_PATH as CHATGPT_CALLBACK_PATH, ChatGPTSignIn, ChatGPTSignInError
 import html as html_lib
 from invest_ai.data.cryptocom_market_overview import CryptoComMarketOverviewError
@@ -415,6 +416,37 @@ class DeskHandler(MarketDashboardHandler):
             return self._reject_post(exc.status, str(exc))
         return self._send_json(200, result)
 
+    def _handle_openrouter_post(self, forget: bool) -> None:
+        """Enregistre ou oublie la clé OpenRouter du PC. L'appelant a déjà vérifié l'origine locale."""
+        keys = getattr(self.server, "openrouter_keys", None)
+        if keys is None:
+            self._drain_body(2048)
+            return self._reject_post(404, "Clé OpenRouter : à mettre dans les variables du serveur.")
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold() != "application/json":
+            self._drain_body(2048)
+            return self._reject_post(415, "JSON requis.")
+        raw_length = self.headers.get("Content-Length", "")
+        if not raw_length.isdecimal() or not 1 <= int(raw_length) <= 2048:
+            return self._reject_post(413, "Requête trop grande.")
+        try:
+            payload = json.loads(self.rfile.read(int(raw_length)))
+        except (ValueError, UnicodeDecodeError):
+            return self._reject_post(400, "JSON invalide.")
+        try:
+            if forget:
+                if payload != {"forget": True}:
+                    raise AIKeyError("Confirmation manquante.")
+                state = keys.forget()
+            else:
+                if not isinstance(payload, dict) or not {"key"} <= set(payload) <= {"key", "model"}:
+                    raise AIKeyError("Clé manquante.")
+                state = keys.save(payload["key"], payload.get("model", ""))
+        except AIKeyError as exc:
+            return self._reject_post(400, str(exc))
+        except OSError:
+            return self._reject_post(500, "Impossible d’enregistrer la clé sur ce PC.")
+        return self._send_json(200, state)
+
     MY_LIST_NOTE = ("La note de 1 à 5 décrit seulement à quel point le prix a bougé ces 3 derniers mois. "
                     "Ce n’est ni un conseil ni une prévision.")
 
@@ -471,6 +503,11 @@ class DeskHandler(MarketDashboardHandler):
                 self._drain_body(1024)
                 return self._reject_post(403, "Origine locale requise.")
             return self._handle_my_list_post()
+        if urlsplit(self.path).path in {"/api/desk/openrouter/key", "/api/desk/openrouter/forget"}:
+            if not self._local_host() or not self._same_origin():
+                self._drain_body(2048)
+                return self._reject_post(403, "Origine locale requise.")
+            return self._handle_openrouter_post(urlsplit(self.path).path.endswith("/forget"))
         if urlsplit(self.path).path in {"/api/desk/chatgpt/connect", "/api/desk/chatgpt/disconnect"}:
             self._drain_body(4096)
             if not self._local_host() or not self._same_origin():
@@ -1125,7 +1162,11 @@ def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
     if chatgpt_signin is None and handler_class is DeskHandler:
         # Version PC uniquement : jetons chiffrés par Windows dans le dossier de données local.
         server.chatgpt_signin = ChatGPTSignIn(Path(data_dir or ROOT / "data"))
-    server.chat_service = chat_service or ChatService(chatgpt=server.chatgpt_signin)
+    # Version PC uniquement : clé OpenRouter saisie dans l'appli, chiffrée par Windows.
+    server.openrouter_keys = (OpenRouterKeyStore(Path(data_dir or ROOT / "data"))
+                              if handler_class is DeskHandler else None)
+    server.chat_service = chat_service or ChatService(chatgpt=server.chatgpt_signin,
+                                                      openrouter_keys=server.openrouter_keys)
     server.desk_store = DeskStore(Path(data_dir or ROOT / "data") / "desk.sqlite3")
     server.cryptocom_observer_credential_store = cryptocom_observer_credential_store or WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Observer-Can-Read")
@@ -1145,7 +1186,7 @@ def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
         Path(data_dir or ROOT / "data") / "live-order-journal.sqlite3")
     server.market_evidence_store = CryptoComMarketEvidenceStore(str(Path(data_dir or ROOT)))
     server.candles = CandleSource()
-    server.watch_risk = WatchRisk(crypto_candles=lambda symbol: server.candles.get(symbol, "1D"))
+    server.watch_risk = WatchRisk()
     server.cryptocom_market_stream.configure_candlesticks(
         "5m", server.candles.update_live_candle)
     server.cryptocom_instrument_catalog = cryptocom_instrument_catalog or CryptoComInstrumentCatalog()

@@ -3,7 +3,8 @@
 L'IA reçoit un relevé des marchés publics déjà chargés par BUBUS2.0 et répond
 en français. Elle n'a aucun outil : elle ne peut ni lire de clé, ni passer
 d'ordre, ni modifier quoi que ce soit. Les clés d'API IA viennent uniquement des
-variables d'environnement et ne sont jamais renvoyées au navigateur.
+variables d'environnement (ou, sur le PC, du coffre Windows) et ne sont jamais
+renvoyées au navigateur.
 """
 from __future__ import annotations
 
@@ -146,22 +147,27 @@ def parse_conversation(raw: bytes) -> list[dict[str, str]]:
     return cleaned
 
 
-def market_snapshot(server: Any, *, crypto_limit: int = 30, global_limit: int = 20) -> str:
+def market_snapshot(server: Any, *, global_limit: int = 30) -> str:
     """Relevé compact des marchés publics déjà chargés par le serveur."""
     lines = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines.append(f"Données BUBUS — relevé du {now}. Aucune donnée de portefeuille n'est fournie.")
     try:
-        crypto = server.cryptocom_market_overview.get_overview()
-        rows = [m for m in crypto.get("markets", []) if isinstance(m, dict)]
-        rows.sort(key=lambda m: _number(m.get("volume_24h_usd")), reverse=True)
-        lines.append(f"Crypto.com Exchange (Spot, source {crypto.get('fetched_at', 'heure inconnue')}) — "
-                     f"{len(rows)} paires, les {min(crypto_limit, len(rows))} plus échangées :")
-        for m in rows[:crypto_limit]:
-            lines.append(f"- {m.get('symbol')} : {m.get('price')} {m.get('currency', '')}, "
-                         f"24 h {m.get('change_24h_pct', '?')} %, volume 24 h {m.get('volume_24h_usd', '?')} USD")
+        items = server.watch_risk.describe_all(server.desk_store.my_list())
+        if items:
+            lines.append("« Ma liste » de l'utilisateur (cours Yahoo Finance, note de risque 1 à 5 sur 3 mois) :")
+            for m in items[:40]:
+                if m.get("error"):
+                    lines.append(f"- {m.get('name')} ({m.get('symbol')}) : cours indisponible")
+                    continue
+                kind = "crypto" if m.get("kind") == "crypto" else "action"
+                lines.append(f"- {m.get('name')} ({m.get('symbol')}, {kind}) : {m.get('price')} {m.get('currency', '')}, "
+                             f"1 jour {m.get('change_1d_pct')} %, 1 mois {m.get('change_1m_pct')} %, "
+                             f"note {m.get('score')}/5 ({m.get('label')})")
+        else:
+            lines.append("« Ma liste » de l'utilisateur est vide.")
     except Exception:  # noqa: BLE001 - une source en panne ne doit pas bloquer la discussion
-        lines.append("Crypto.com Exchange : données indisponibles pour le moment.")
+        lines.append("« Ma liste » : cours indisponibles pour le moment.")
     try:
         gecko = server.coingecko_market_overview.get_overview()
         rows = [m for m in gecko.get("markets", []) if isinstance(m, dict)]
@@ -173,7 +179,6 @@ def market_snapshot(server: Any, *, crypto_limit: int = 30, global_limit: int = 
                          f"capitalisation {m.get('market_cap_usd', '?')} USD")
     except Exception:  # noqa: BLE001
         lines.append("CoinGecko : données indisponibles pour le moment.")
-    lines.append("Actions et ETF : pas encore de cours dans BUBUS.")
     return "\n".join(lines)
 
 
@@ -188,12 +193,24 @@ class ChatService:
     def __init__(self, *, config_loader: Callable[[], ChatConfig] = load_config,
                  claude_call: Callable[..., str] | None = None,
                  openai_call: Callable[..., str] | None = None,
-                 quota: DailyQuota | None = None, chatgpt: Any | None = None):
+                 quota: DailyQuota | None = None, chatgpt: Any | None = None,
+                 openrouter_keys: Any | None = None):
         self._config_loader = config_loader
         self._chatgpt = chatgpt
+        self._openrouter_keys = openrouter_keys
         self._claude_call = claude_call or _call_claude
         self._openai_call = openai_call or _call_chat_completions
         self._quota = quota or DailyQuota()
+
+    def _config(self) -> ChatConfig:
+        """Variables du serveur d'abord ; sinon la clé OpenRouter enregistrée sur ce PC."""
+        config = self._config_loader()
+        if config.ready or self._openrouter_keys is None:
+            return config
+        saved = self._openrouter_keys.credentials()
+        if saved is None:
+            return config
+        return ChatConfig("openrouter", saved[1], saved[0], config.daily_limit)
 
     def _use_chatgpt(self, config: ChatConfig) -> bool:
         """Abonnement ChatGPT connecté sur ce PC : prioritaire sauf choix explicite."""
@@ -201,8 +218,10 @@ class ChatService:
         return self._chatgpt is not None and not (explicit and config.ready) and self._chatgpt.ready
 
     def state(self) -> dict[str, Any]:
-        config = self._config_loader()
+        config = self._config()
         state = config.public_state()
+        if self._openrouter_keys is not None:
+            state["openrouter"] = self._openrouter_keys.state()
         if self._chatgpt is not None:
             state["chatgpt"] = self._chatgpt.state()
             if self._use_chatgpt(config):
@@ -211,7 +230,7 @@ class ChatService:
         return state
 
     def reply(self, messages: list[dict[str, str]], snapshot: str) -> dict[str, Any]:
-        config = self._config_loader()
+        config = self._config()
         if self._use_chatgpt(config):
             from bubus.chatgpt_signin import ChatGPTSignInError
             remaining = self._quota.take(config.daily_limit)
@@ -272,7 +291,7 @@ def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[di
     api_messages.append({"role": "user", "content": snapshot + "\n\n" + messages[-1]["content"]})
     body = json.dumps({"model": config.model, "messages": api_messages}).encode("utf-8")
     request = urllib.request.Request(endpoints[config.provider], data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
+                                     headers={"Content-Type": "application/json", "X-Title": "BUBUS"})
     request.add_unredirected_header("Authorization", f"Bearer {config.api_key}")
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
@@ -281,6 +300,8 @@ def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[di
         exc.close()
         if exc.code == 401:
             raise ChatUnavailable(f"La clé {name} est refusée. Vérifie {config.provider.upper()}_API_KEY.") from None
+        if exc.code in {400, 404} and config.provider == "openrouter":
+            raise ChatUnavailable(f"OpenRouter refuse le modèle « {config.model} ». Vérifie son nom.", 502) from None
         if exc.code == 402 and config.provider == "openrouter":
             raise ChatUnavailable("Le crédit OpenRouter disponible est insuffisant pour ce modèle.", 402) from None
         if exc.code == 429:

@@ -1,6 +1,6 @@
 # BUBUS 2.0 — Dossier de reprise
 
-*État au 19 novembre 2026. Ce dossier est destiné à la personne qui reprend le projet.*
+*État au 19 novembre 2026 (mis à jour après le retrait de Crypto.com et l'ajout d'OpenRouter). Ce dossier est destiné à la personne qui reprend le projet.*
 
 ## 1. Le projet en deux phrases
 
@@ -15,7 +15,8 @@ Le propriétaire ne parle pas anglais : **toute l'interface et tous les messages
 ## 2. Règles à ne jamais casser
 
 1. **Aucun ordre de bourse.** Le trading réel est bloqué (`orders_enabled: false` partout). BUBUS lit, il n'achète et ne vend rien.
-2. **Lecture seule sur les comptes** (Crypto.com, Revolut X) : uniquement des clés d'API en lecture, sans retrait ni trading.
+2. **Lecture seule sur les comptes** (Revolut X) : uniquement des clés d'API en lecture, sans retrait ni trading.
+   **Crypto.com est retiré** (décision de Louis, 19/11/2026) : seul Revolut X sera branché.
 3. **Aucun secret dans le code ni dans un message.**
    - Sur le PC, les clés vont dans le coffre-fort de Windows (DPAPI ou `cmdkey`).
    - En ligne, elles vont dans les **Variables** de Railway.
@@ -46,11 +47,12 @@ Commits de la branche, du plus récent au plus ancien :
 |---|---|
 | `server.py` | Serveur HTTP local (`DeskHandler`), toutes les routes `/api/desk/*`. `make_server()` assemble les services. |
 | `cloud_preview.py` | Version en ligne : page de connexion, cookie de session signé (HMAC, 30 jours), limitation des essais, liste blanche des routes, bandeau « BUBUS EN LIGNE ». |
-| `assistant_chat.py` | Discussion IA : Claude (SDK `anthropic`, modèle `claude-opus-5-5`) ou OpenAI, quota de messages par jour, relevé de marché joint aux questions. |
+| `assistant_chat.py` | Discussion IA : OpenRouter (modèle par défaut `anthropic/claude-sonnet-4.6`), Claude (SDK `anthropic`, modèle `claude-opus-5-5`) ou OpenAI, quota de messages par jour, relevé joint aux questions (« Ma liste » + CoinGecko). |
+| `ai_keys.py` | Clé OpenRouter saisie dans l'appli PC, chiffrée par DPAPI (`data/openrouter-key.bin`), jamais renvoyée au navigateur. |
 | `chatgpt_signin.py` | « Continuer avec ChatGPT » (PC seulement) : OAuth PKCE en boucle locale, jetons chiffrés par DPAPI, appel de `/v1/responses`. |
-| `watch_risk.py` | « Ma liste » : cours, évolution, note de risque 1 à 5 et recherche d'actions. |
+| `watch_risk.py` | « Ma liste » : cours Yahoo Finance (cryptos `BTC_USD` → `BTC-USD`, et actions), évolution, note de risque 1 à 5, recherche. |
 | `store.py` | SQLite local : favoris crypto (`watchlist`), actions (`stock_watchlist`), journal d'activité. |
-| `market.py` | Bougies Crypto.com (cache). |
+| `market.py` | Bougies Crypto.com (cache). Plus appelé par l'interface depuis le retrait de Crypto.com. |
 | `ui/` | Interface : `index.html`, `desk.js`, `desk.css`, `manifest.webmanifest`, `sw.js`, icônes. |
 
 ### Documentation
@@ -96,10 +98,10 @@ Tests du travail récent : `tests/bubus_v2/test_cloud_app.py`, `test_chatgpt_sig
 - **Version en ligne** :
   - connexion et appli Android installable (manifeste, service worker, icônes) ;
   - affichage adapté au téléphone (barre de navigation en bas) ;
-  - marchés publics Crypto.com et CoinGecko.
-- **Discussion IA** : prête, mais **sans IA branchée en ligne** (voir 7.1).
+  - marchés : cryptos CoinGecko (Crypto.com est retiré de l'interface ; son code serveur reste en place mais n'est plus appelé).
+- **Discussion IA** : prête. OpenRouter est accepté (variable `OPENROUTER_API_KEY` en ligne, case dans l'onglet Discussion sur le PC). **Aucune clé n'est encore branchée en ligne** (voir 7.1).
 - **« Ma liste »**, sur PC et en ligne :
-  - recherche par nom ; cryptos via Crypto.com, actions via la recherche Yahoo Finance ;
+  - recherche par nom, cryptos et actions, via Yahoo Finance ;
   - prix, évolution sur 1 jour, 1 semaine et 1 mois ;
   - note de risque calculée ainsi :
     - agitation quotidienne sur environ 1 mois, ramenée à l'année : seuils 20, 35, 60 et 90 % ;
@@ -110,7 +112,8 @@ Tests du travail récent : `tests/bubus_v2/test_cloud_app.py`, `test_chatgpt_sig
 ## 7. À faire, par ordre d'importance
 
 1. **Brancher une IA en ligne.** Ajouter dans les Variables Railway :
-   - soit `ANTHROPIC_API_KEY` (Claude) ;
+   - de préférence `OPENROUTER_API_KEY` (choix de Louis) ;
+   - ou `ANTHROPIC_API_KEY` (Claude) ;
    - soit `OPENAI_API_KEY` + `BUBUS_AI_MODEL`.
 
    La clé doit être dédiée à BUBUS, avec une limite de dépense mensuelle réglée chez le fournisseur.
@@ -124,7 +127,6 @@ Tests du travail récent : `tests/bubus_v2/test_cloud_app.py`, `test_chatgpt_sig
 5. **Fusionner dans `main`** : créer la demande de fusion (PR) de `feat/appli-android-discussion-ia`, et fusionner aussi `ccr-00cafae5-fjss7k`.
 6. **Partie 3 du plan : voir son portefeuille en ligne, en lecture seule.**
    - Revolut X : API signée Ed25519, en-têtes `X-Revx-API-Key`, `X-Revx-Timestamp` et `X-Revx-Signature`, base `https://revx.revolut.com`.
-   - Crypto.com Exchange.
 
    Une clé Revolut X en lecture seule a été créée, mais **jamais testée** : Louis doit d'abord la ranger dans le coffre Windows avec `cmdkey /generic:BUBUS_REVOLUTX_API_KEY /user:bubus /pass`. Le script d'essai `tester_revolutx.py` est local et non versionné.
 7. **Partie 5 du plan : alertes et résumé du matin**, en s'appuyant sur `store.my_list()` et `WatchRisk.describe_all()`. Exemples : variation forte, passage d'une note à 4 ou 5. Le canal reste à choisir (notification web sur l'appli, ou e-mail).

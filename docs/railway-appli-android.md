@@ -45,8 +45,19 @@ Enregistre BUBUS auprès d’OpenAI pour la connexion web **et** l’utilisation
 Dans **Discussion**, appuie sur **Continuer avec ChatGPT**, autorise BUBUS sur la page OpenAI, puis la discussion se rouvre. **Déconnecter ChatGPT** retire le compte de BUBUS. Le service personnel utilise une seule instance Railway et un seul propriétaire. Tous ses appareils connectés à BUBUS partagent cette connexion. Les jetons sont chiffrés sur le serveur. Un volume persistant et un secret de session stable permettent de garder la connexion après les déploiements.
 
 **Limite de dépense** : règle aussi une limite mensuelle directement chez le
-fournisseur (console Anthropic ou OpenAI). Le plafond de BUBUS compte les
+fournisseur (OpenRouter, console Anthropic ou OpenAI). Le plafond de BUBUS compte les
 messages, pas les euros.
+
+**Brancher OpenRouter, pas à pas** :
+
+1. Sur openrouter.ai, connecte-toi, ajoute un peu de crédit, puis menu *Keys* → *Create Key*.
+   Mets une limite de crédit sur la clé.
+2. Dans Railway, service BUBUS → onglet **Variables** → *New Variable*.
+3. Nom : `OPENROUTER_API_KEY`, valeur : ta clé. Valide. Railway redémarre BUBUS tout seul.
+4. Ouvre la Discussion : la ligne du haut doit dire « OpenRouter · anthropic/claude-sonnet-4.6 ».
+
+Sur le PC, pas besoin de Railway : la case « Ta clé OpenRouter » de l'onglet Discussion
+enregistre la clé dans le coffre Windows.
 
 **Garder « Ma liste »** : sans disque, Railway efface les fichiers à chaque mise
 à jour, donc ta liste de cryptos et d'actions repart à zéro. Pour la garder,

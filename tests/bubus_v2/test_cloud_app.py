@@ -285,7 +285,8 @@ class CloudChatTests(_ServerCase):
         self.assertFalse(result["orders_enabled"])
         self.assertEqual(result["remaining_today"], 4)
         call = self.ai.calls[0]
-        self.assertIn("BTC_USDT", call["snapshot"])
+        self.assertIn("Ma liste", call["snapshot"])
+        self.assertNotIn("Crypto.com", call["snapshot"])
         self.assertIn("Bitcoin", call["snapshot"])
         self.assertIn("portefeuille", call["snapshot"])
         self.assertEqual(call["messages"][-1]["content"], "Comment va le Bitcoin ?")
