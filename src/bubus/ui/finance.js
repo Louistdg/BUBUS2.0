@@ -9,7 +9,7 @@
   try { const saved = JSON.parse(localStorage.getItem('bibus.finance.v1')); if(saved?.balances?.length === 4 && Array.isArray(saved.tx)) state = saved; } catch {}
   let period = '1M', type = 'Toutes', account = null, action, chart;
   const durations = {'1J':1,'1S':7,'1M':30,'1A':365,'Tout':720};
-  const rates = {USD:1.08, BTC:0.000015};
+  let quotes = {};
   const total = () => state.balances.reduce((a,b) => a+b,0);
   const money = n => state.hidden ? '•••••• €' : n.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
   function save(){try {localStorage.setItem('bibus.finance.v1',JSON.stringify(state));} catch {notice('Stockage local indisponible.');}}
@@ -46,13 +46,32 @@
     lucide.createIcons();draw();
   }
   function openAction(name){
-    action=name;$('title').textContent=name;$('fields').replaceChildren();$('estimate').textContent='';$('confirm').hidden=name==='Plus';
+    action=name;$('confirm').disabled=false;$('title').textContent=name;$('fields').replaceChildren();$('estimate').textContent='';$('confirm').hidden=name==='Plus';
     if(name==='Plus'){
       const link=el('a','Ouvrir le portefeuille Revolut X');link.href='/#portfolio';$('fields').append(link);
     }else{
       const label=el('label','Montant en euros'),input=el('input','');Object.assign(input,{id:'amount',type:'number',min:0.01,max:10000000,step:0.01,required:true});label.append(input);$('fields').append(label);
       if(name==='Envoyer'){const to=el('label','Bénéficiaire'),field=el('input','');Object.assign(field,{id:'recipient',required:true,maxLength:70});to.append(field);$('fields').append(to);}
-      if(name==='Convertir'){const target=el('label','Devise cible'),sel=el('select','');sel.id='currency';for(const k of Object.keys(rates))sel.add(new Option(k,k));target.append(sel);$('fields').append(target);const calc=()=>{$('estimate').textContent='Taux de simulation · '+(Number(input.value)*rates[sel.value]).toLocaleString('fr-FR',{maximumFractionDigits:8})+' '+sel.value;};sel.onchange=input.oninput=calc;calc();}
+      if(name==='Convertir'){
+        const target=el('label','Devise cible'),sel=el('select','');
+        sel.id='currency';
+        for(const code of ['USD','BTC']) sel.add(new Option(code,code));
+        target.append(sel);$('fields').append(target);
+        quotes={};
+        function calc(){
+          const quote=quotes[sel.value];
+          $('confirm').disabled=!quote;
+          $('estimate').textContent=quote
+            ? (Number(input.value)*quote.rate).toLocaleString('fr-FR',{maximumFractionDigits:8})+' '+sel.value+' · cours du '+new Date(quote.timestamp*1000).toLocaleString('fr-FR')
+            : 'Cours indisponible pour cette devise.';
+        }
+        sel.onchange=input.oninput=calc;
+        $('confirm').disabled=true;
+        $('estimate').textContent='Lecture du dernier cours…';
+        fetch('/api/desk/conversion-quotes',{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({})).then(data=>{
+          if(sel.isConnected){quotes=data;calc();}
+        });
+      }
     }
     $('modal').showModal();
   }
@@ -60,13 +79,14 @@
     e.preventDefault();const n=Number($('amount').value),now=new Date().toISOString();
     if(!(n>0)||!Number.isFinite(n))return;
     if(action!=='Ajouter'&&n>state.balances[0]){$('estimate').textContent='Solde du compte courant insuffisant.';return;}
+    if(action==='Convertir' && !quotes[$('currency').value]) return;
     const signed=action==='Ajouter'?n:-n;
     const label=action==='Envoyer'?'Envoi à '+$('recipient').value.trim():action==='Ajouter'?'Ajout au compte':'Conversion en '+$('currency').value;
     state.balances[0]=Math.round((state.balances[0]+signed)*100)/100;
     state.tx.unshift({label,amount:signed,date:now,account:0});
     if(action==='Convertir'){
       const fx=$('currency').value,destination=fx==='BTC'?3:1;
-      state.balances[destination]+=n;state.tx.unshift({label:'Conversion reçue · '+(n*rates[fx]).toLocaleString('fr-FR',{maximumFractionDigits:8})+' '+fx,amount:n,date:now,account:destination});
+      state.balances[destination]+=n;state.tx.unshift({label:'Conversion reçue · '+(n*quotes[fx].rate).toLocaleString('fr-FR',{maximumFractionDigits:8})+' '+fx,amount:n,date:now,account:destination});
     }
     account=null;type='Toutes';$('search').value='';save();render();$('modal').close();notice('Simulation enregistrée.');
   };

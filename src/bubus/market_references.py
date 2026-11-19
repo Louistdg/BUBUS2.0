@@ -63,3 +63,18 @@ class MarketReferences:
                     lines = list(pool.map(self._line, BENCHMARKS))
                 self.cache = {"expires": now + 300, "lines": lines}
             return self.cache["lines"]
+
+def conversion_quotes():
+    """Taux indicatifs en unités de devise cible pour un euro."""
+    result = {}
+    for currency, symbol in (("USD", "EURUSD=X"), ("BTC", "BTC-EUR")):
+        try:
+            chart = _get_json(YAHOO_CHART + quote(symbol, safe="") + "?range=1d&interval=1d")
+            meta = chart["chart"]["result"][0]["meta"]
+            price = float(meta["regularMarketPrice"])
+            if math.isfinite(price) and price > 0:
+                result[currency] = {"rate": price if currency == "USD" else 1 / price,
+                                    "timestamp": int(meta["regularMarketTime"])}
+        except (ValueError, TypeError, IndexError, KeyError, OSError):
+            continue
+    return result
