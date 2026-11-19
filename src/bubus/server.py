@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from bubus import PRODUCT_NAME, __version__
 from bubus.market import CandleSource
+from bubus.watch_risk import WatchRisk, WatchRiskError
 from bubus.live_signal import LiveSignalError, observe_cryptocom_breakout
 from bubus.live_scanner import LiveSignalScanner
 from bubus.research import ResearchError, compare_candles
@@ -345,6 +346,8 @@ class DeskHandler(MarketDashboardHandler):
                 return self._send_json(200, scan)
             if parts.path == "/api/desk/chat":
                 return self._send_json(200, self.server.chat_service.state())
+            if parts.path in {"/api/desk/my-list", "/api/desk/my-list/search"}:
+                return self._handle_my_list_get(parts)
             if parts.path == "/api/desk/chatgpt" and getattr(self.server, "chatgpt_signin", None) is not None:
                 return self._send_json(200, self.server.chatgpt_signin.state())
             return self._send_json(404, {"error": "Route inconnue."})
@@ -412,6 +415,45 @@ class DeskHandler(MarketDashboardHandler):
             return self._reject_post(exc.status, str(exc))
         return self._send_json(200, result)
 
+    MY_LIST_NOTE = ("La note de 1 à 5 décrit seulement à quel point le prix a bougé ces 3 derniers mois. "
+                    "Ce n’est ni un conseil ni une prévision.")
+
+    def _handle_my_list_get(self, parts) -> None:
+        if parts.path == "/api/desk/my-list/search":
+            text = (parse_qs(parts.query, max_num_fields=4).get("q") or [""])[0]
+            try:
+                return self._send_json(200, {"results": self.server.watch_risk.search(text)})
+            except WatchRiskError as exc:
+                return self._send_json(503, {"error": str(exc)})
+        items = self.server.watch_risk.describe_all(self.server.desk_store.my_list())
+        return self._send_json(200, {"items": items, "note": self.MY_LIST_NOTE, "orders_enabled": False})
+
+    def _handle_my_list_post(self) -> None:
+        """Ajoute ou retire une crypto ou une action. L'appelant a déjà vérifié l'origine."""
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().casefold() != "application/json":
+            return self._reject_post(415, "JSON requis.")
+        raw_length = self.headers.get("Content-Length", "")
+        if not raw_length.isdecimal() or not 1 <= int(raw_length) <= 1024:
+            return self._reject_post(413, "Requête trop grande.")
+        try:
+            payload = json.loads(self.rfile.read(int(raw_length)))
+            if not isinstance(payload, dict) or not {"kind", "symbol", "enabled"} <= set(payload) <= {
+                    "kind", "symbol", "name", "enabled"}:
+                raise ValueError()
+            if payload["kind"] == "crypto":
+                self.server.desk_store.set_watch(payload["symbol"], payload["enabled"])
+            elif payload["kind"] == "action":
+                self.server.desk_store.set_stock_watch(payload["symbol"], payload.get("name", ""), payload["enabled"])
+            else:
+                raise ValueError()
+        except ValueError as exc:
+            message = str(exc) if str(exc).startswith("La liste") else "Élément invalide."
+            return self._reject_post(400, message)
+        except (TypeError, json.JSONDecodeError):
+            return self._reject_post(400, "Élément invalide.")
+        return self._send_json(200, {"list": self.server.desk_store.my_list(),
+                                     "watchlist": self.server.desk_store.watchlist()})
+
     def _drain_body(self, limit: int = 65536) -> None:
         """Lit le corps avant un refus pour ne pas couper la connexion (Windows)."""
         raw_length = self.headers.get("Content-Length", "")
@@ -424,6 +466,11 @@ class DeskHandler(MarketDashboardHandler):
                 self._drain_body()
                 return self._reject_post(403, "Origine locale requise.")
             return self._handle_chat_post()
+        if urlsplit(self.path).path == "/api/desk/my-list":
+            if not self._local_host() or not self._same_origin():
+                self._drain_body(1024)
+                return self._reject_post(403, "Origine locale requise.")
+            return self._handle_my_list_post()
         if urlsplit(self.path).path in {"/api/desk/chatgpt/connect", "/api/desk/chatgpt/disconnect"}:
             self._drain_body(4096)
             if not self._local_host() or not self._same_origin():
@@ -1098,6 +1145,7 @@ def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
         Path(data_dir or ROOT / "data") / "live-order-journal.sqlite3")
     server.market_evidence_store = CryptoComMarketEvidenceStore(str(Path(data_dir or ROOT)))
     server.candles = CandleSource()
+    server.watch_risk = WatchRisk(crypto_candles=lambda symbol: server.candles.get(symbol, "1D"))
     server.cryptocom_market_stream.configure_candlesticks(
         "5m", server.candles.update_live_candle)
     server.cryptocom_instrument_catalog = cryptocom_instrument_catalog or CryptoComInstrumentCatalog()

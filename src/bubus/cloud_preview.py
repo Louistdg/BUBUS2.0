@@ -26,6 +26,7 @@ _AUTHENTICATED_GET_PATHS = frozenset({
     "/api/desk/state", "/api/market-data/crypto-overview",
     "/api/market-data/coingecko-overview", "/api/market-data/state",
     "/api/desk/candles", "/api/desk/research", "/api/desk/chat",
+    "/api/desk/my-list", "/api/desk/my-list/search",
 })
 # Fichiers d'installation de l'appli : le navigateur les télécharge sans cookie.
 _PUBLIC_GET_PATHS = frozenset({
@@ -321,6 +322,11 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
                 self._drain_body()
                 return self._reject_post(403, "Origine requise.")
             return self._handle_chat_post()
+        if path == "/api/desk/my-list":
+            if not self._same_site_write():
+                self._drain_body(1024)
+                return self._reject_post(403, "Origine requise.")
+            return self._handle_my_list_post()
         self._drain_body()
         self._deny_write()
 
@@ -353,7 +359,10 @@ def main() -> int:
         port = int(os.environ.get("PORT", "8790"))
     except ValueError:
         raise SystemExit("PORT must be a valid TCP port.") from None
-    data_dir = Path(os.environ.get("BUBUS_PREVIEW_DATA_DIR", "/tmp/bubus-preview"))
+    # Un « volume » Railway garde « Ma liste » entre deux mises à jour ; sans lui, /tmp est vidé.
+    volume = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH", "")
+    default_dir = str(Path(volume) / "bubus") if volume else "/tmp/bubus-preview"
+    data_dir = Path(os.environ.get("BUBUS_PREVIEW_DATA_DIR", default_dir))
     server = make_server(port, data_dir=data_dir, bind_host="0.0.0.0",
                          handler_class=AuthenticatedCloudPreviewHandler)
     print("BUBUS2.0 en ligne : marchés publics et discussion IA, en lecture seule.", flush=True)

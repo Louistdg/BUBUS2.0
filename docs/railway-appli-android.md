@@ -35,6 +35,11 @@ ni dans un message.
 fournisseur (console Anthropic ou OpenAI). Le plafond de BUBUS compte les
 messages, pas les euros.
 
+**Garder « Ma liste »** : sans disque, Railway efface les fichiers à chaque mise
+à jour, donc ta liste de cryptos et d'actions repart à zéro. Pour la garder,
+ajoute un **volume** au service (clic droit sur le service → *Attach volume*,
+dossier `/data`). BUBUS le détecte tout seul, sans variable à ajouter.
+
 ## 3. Installer l'appli sur Android
 
 1. Sur le téléphone, ouvre l'adresse `https://…` de Railway dans **Chrome**.

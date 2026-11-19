@@ -22,8 +22,18 @@
   const state = {exchange: [], restExchange: [], coingecko: [], watchlist: [], source: 'exchange', selected: null,
     period: '1h', candles: [], chartRequest: 0, refreshBusy: false, streamTimer: null,
     scanTimer: null, scanBusy: false, streamQuotes: new Map(), marketRows: new Map()};
-  const labels = {markets: 'Marchés', chat: 'Discussion', watchlist: 'Favoris', portfolio: 'Portefeuille',
+  const labels = {markets: 'Marchés', chat: 'Discussion', watchlist: 'Ma liste', portfolio: 'Portefeuille',
     autopilot: 'Automatisation', activity: 'Activité', settings: 'Connexions'};
+  const myList = {items: [], loaded: false, busy: false, count: null, searchTimer: null, searchId: 0};
+  const cryptoNames = {bitcoin: 'BTC', ethereum: 'ETH', ether: 'ETH', solana: 'SOL', ripple: 'XRP', cardano: 'ADA',
+    dogecoin: 'DOGE', polkadot: 'DOT', chainlink: 'LINK', litecoin: 'LTC', avalanche: 'AVAX', tron: 'TRX', pepe: 'PEPE',
+    shiba: 'SHIB', cronos: 'CRO', polygon: 'POL', toncoin: 'TON', sui: 'SUI', binance: 'BNB', stellar: 'XLM'};
+  const prettyCrypto = base => {
+    const name = Object.keys(cryptoNames).find(key => cryptoNames[key] === base);
+    return name ? name[0].toUpperCase() + name.slice(1) : base;
+  };
+  const pctText = value => value === null || value === undefined ? '—'
+    : `${value > 0 ? '+' : ''}${Number(value).toLocaleString('fr-BE', {maximumFractionDigits: 1})} %`;
   const api = async (path, payload) => {
     const response = await fetch(path, {cache: 'no-store', ...(payload === undefined ? {} : {
       method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)})});
@@ -257,7 +267,7 @@
     $('nav-market-count').textContent = rows.length || '—';
     $('metric-up').textContent = rows.length ? rows.filter(row => Number(row.change_24h_pct) > 0).length : '—';
     $('metric-down').textContent = rows.length ? rows.filter(row => Number(row.change_24h_pct) < 0).length : '—';
-    $('nav-watch-count').textContent = state.watchlist.length;
+    $('nav-watch-count').textContent = myList.count ?? state.watchlist.length;
   }
   function rows() {
     const query = $('search').value.trim().toUpperCase();
@@ -399,8 +409,9 @@
     finally {$('refresh').disabled = false;}
   });
   async function toggleWatch(symbol) {
-    try {const result = await api('/api/desk/watchlist', {symbol, enabled: !state.watchlist.includes(symbol)});
-      state.watchlist = result.watchlist; renderMarkets(); renderWatchlist(); updateSelected();}
+    try {const result = await api('/api/desk/my-list', {kind: 'crypto', symbol, enabled: !state.watchlist.includes(symbol)});
+      state.watchlist = result.watchlist; myList.count = result.list.length; myList.loaded = false;
+      renderMarkets(); updateSelected(); metrics(); if (location.hash === '#watchlist') renderWatchlist();}
     catch (error) {toast(error.message);}
   }
   $('chart-watch').addEventListener('click', () => {if (state.selected) toggleWatch(state.selected);});
@@ -472,17 +483,110 @@
     $('chart-tooltip').hidden = false; $('chart-tooltip').style.left = Math.max(0, Math.min(event.clientX - bounds.left, bounds.width - 155)) + 'px'; $('chart-tooltip').style.top = '12px';
   });
   canvas.addEventListener('mouseleave', () => {$('chart-tooltip').hidden = true;});
-  function renderWatchlist() {
-    $('watchlist-content').replaceChildren();
-    if (!state.watchlist.length) {$('watchlist-content').append(empty('Une sélection qui vous ressemble.', 'Ajoutez une paire aux favoris avec l’étoile dans la liste des marchés.')); return;}
-    for (const symbol of state.watchlist) {
-      const market = state.exchange.find(row => row.symbol === symbol); const row = node('div', undefined, 'watch-row');
-      const button = node('button', symbol.replace('_', ' / '), 'text-link');
-      button.addEventListener('click', () => {view('markets'); select(symbol);});
-      row.append(button, node('span', market ? `${format(market.price)} ${market.currency}` : 'Cotation indisponible'), node('span', market ? changeText(market.change_24h_pct) : '—'));
-      const remove = node('button', '×', 'icon-button'); remove.setAttribute('aria-label', `Retirer ${symbol} des favoris`); remove.addEventListener('click', () => toggleWatch(symbol)); row.append(remove); $('watchlist-content').append(row);
+  async function renderWatchlist(force = false) {
+    const box = $('watchlist-content');
+    if (myList.busy) return;
+    if (!myList.loaded || force) {
+      myList.busy = true;
+      if (!myList.items.length) box.replaceChildren(node('p', 'Chargement des cours et des notes…', 'mylist-loading'));
+      try {
+        const result = await api('/api/desk/my-list');
+        myList.items = result.items; myList.loaded = true; myList.count = result.items.length;
+        if (result.note) $('mylist-note').textContent = result.note;
+        metrics();
+      } catch (error) { toast(error.message); }
+      finally { myList.busy = false; }
+    }
+    box.replaceChildren();
+    if (!myList.items.length) {
+      box.append(empty('Ta liste est vide.', 'Tape un nom au-dessus (Bitcoin, Apple…) ou appuie sur une suggestion.'));
+      const ideas = node('div', undefined, 'mylist-ideas');
+      for (const idea of [{kind: 'crypto', symbol: 'BTC_USD', name: 'Bitcoin'}, {kind: 'crypto', symbol: 'ETH_USD', name: 'Ethereum'},
+        {kind: 'action', symbol: 'AAPL', name: 'Apple'}, {kind: 'action', symbol: 'NVDA', name: 'Nvidia'}, {kind: 'action', symbol: 'MC.PA', name: 'LVMH'}]) {
+        const chip = node('button', `+ ${idea.name}`, 'mylist-chip'); chip.type = 'button';
+        chip.addEventListener('click', () => changeMyList(idea, true)); ideas.append(chip);
+      }
+      box.append(ideas); return;
+    }
+    const sorted = [...myList.items].sort((a, b) => (b.score || 0) - (a.score || 0));
+    for (const item of sorted) {
+      const row = node('div', undefined, 'mylist-row');
+      const who = node('div', undefined, 'mylist-who');
+      who.append(node('strong', item.kind === 'crypto' ? prettyCrypto(item.symbol.split('_')[0]) : item.name), node('small', `${item.kind === 'crypto' ? 'Crypto' : 'Action'} · ${item.kind === 'crypto' ? item.symbol.replace('_', ' / ') : item.symbol}`));
+      const price = node('div', undefined, 'mylist-price');
+      if (item.error) {
+        price.append(node('span', item.error, 'mylist-error'));
+      } else {
+        price.append(node('strong', `${format(item.price)} ${item.currency}`),
+          node('small', `1 jour ${pctText(item.change_1d_pct)} · 1 sem. ${pctText(item.change_1w_pct)} · 1 mois ${pctText(item.change_1m_pct)}`));
+      }
+      const risk = node('div', undefined, `mylist-risk risk-${item.score || 0}`);
+      if (item.score) {
+        risk.append(node('b', String(item.score)), node('span', item.label));
+        risk.title = item.explanation; risk.setAttribute('aria-label', `Risque ${item.score} sur 5, ${item.label}. ${item.explanation}`);
+      } else { risk.append(node('b', '?'), node('span', 'Inconnu')); }
+      const remove = node('button', '×', 'icon-button'); remove.type = 'button';
+      remove.setAttribute('aria-label', `Retirer ${item.name} de ma liste`);
+      remove.addEventListener('click', () => changeMyList({...item, name: item.kind === 'crypto' ? prettyCrypto(item.symbol.split('_')[0]) : item.name}, false));
+      row.append(who, price, risk, remove);
+      if (item.explanation) row.append(node('p', item.explanation, 'mylist-why'));
+      box.append(row);
     }
   }
+  async function changeMyList(item, enabled) {
+    try {
+      const result = await api('/api/desk/my-list', {kind: item.kind, symbol: item.symbol, name: item.name || '', enabled});
+      state.watchlist = result.watchlist; myList.count = result.list.length;
+      if (!enabled) myList.items = myList.items.filter(row => !(row.kind === item.kind && row.symbol === item.symbol));
+      toast(enabled ? `${item.name} ajouté à ta liste.` : `${item.name} retiré de ta liste.`);
+      $('mylist-search').value = ''; $('mylist-results').replaceChildren();
+      renderMarkets(); metrics(); renderWatchlist(enabled);
+    } catch (error) { toast(error.message); }
+  }
+  function cryptoMatches(text) {
+    const query = text.trim().toLowerCase(); if (!query) return [];
+    const wanted = new Set([query.toUpperCase()]);
+    for (const [name, code] of Object.entries(cryptoNames)) if (name.startsWith(query)) wanted.add(code);
+    const found = new Map();
+    for (const market of state.exchange) {
+      const [base, quote] = market.symbol.split('_');
+      if (!wanted.has(base) || !['USD', 'USDT', 'EUR'].includes(quote)) continue;
+      const previous = found.get(base);
+      if (!previous || (quote === 'USD' && previous.symbol.split('_')[1] !== 'USD')) found.set(base, {kind: 'crypto', symbol: market.symbol,
+        name: prettyCrypto(base), place: 'Crypto.com'});
+    }
+    return [...found.values()].slice(0, 3);
+  }
+  function showResults(results, message) {
+    const box = $('mylist-results'); box.replaceChildren();
+    if (message) box.append(node('p', message, 'microcopy'));
+    for (const result of results) {
+      const owned = myList.items.some(row => row.kind === result.kind && row.symbol === result.symbol)
+        || (result.kind === 'crypto' && state.watchlist.includes(result.symbol));
+      const button = node('button', undefined, 'mylist-result'); button.type = 'button'; button.disabled = owned;
+      button.setAttribute('role', 'listitem');
+      button.append(node('strong', result.name), node('small', `${result.kind === 'crypto' ? 'Crypto' : 'Action'} · ${result.symbol}${result.place ? ` · ${result.place}` : ''}`),
+        node('span', owned ? 'Déjà dans ta liste' : '+ Ajouter', 'mylist-add-word'));
+      button.addEventListener('click', () => changeMyList(result, true));
+      box.append(button);
+    }
+  }
+  $('mylist-search').addEventListener('input', () => {
+    clearTimeout(myList.searchTimer);
+    const text = $('mylist-search').value.trim();
+    if (text.length < 2) { $('mylist-results').replaceChildren(); return; }
+    const crypto = cryptoMatches(text); showResults(crypto, 'Recherche…');
+    const id = ++myList.searchId;
+    myList.searchTimer = setTimeout(async () => {
+      try {
+        const result = await api(`/api/desk/my-list/search?q=${encodeURIComponent(text)}`);
+        if (id !== myList.searchId) return;
+        const all = [...crypto, ...result.results];
+        showResults(all, all.length ? '' : 'Rien trouvé. Essaie un autre nom ou le symbole (ex. AAPL).');
+      } catch (error) { if (id === myList.searchId) showResults(crypto, error.message); }
+    }, 350);
+  });
+  $('mylist-refresh').addEventListener('click', () => renderWatchlist(true));
   function empty(title, description) {const container = node('div', undefined, 'empty-state'); container.append(node('span', '◎'), node('h3', title), node('p', description)); return container;}
   async function loadActivity() {
     try {const result = await api('/api/desk/activity'); $('activity-content').replaceChildren();

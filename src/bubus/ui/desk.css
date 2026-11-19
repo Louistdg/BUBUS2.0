@@ -252,3 +252,23 @@ body[data-mode="cloud"] .live-signal-panel{display:none}
   #view-chat h1{font-size:22px}
 }
 @media(max-width:600px){.table-scroll{max-height:62vh}}
+/* Ma liste : cryptos et actions avec note de risque */
+.mylist-add{padding:18px 20px;margin-bottom:16px;overflow:visible}.mylist-add label{display:block;font-size:12px;font-weight:600;margin-bottom:10px}.mylist-add .search-box input{width:100%;font-size:13px;padding:11px 8px}
+.mylist-results{display:grid;gap:6px;margin-top:8px}.mylist-results .microcopy{margin-top:4px!important}
+.mylist-result{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--white);color:var(--ink)}
+.mylist-result:hover:not(:disabled){border-color:var(--green)}.mylist-result strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mylist-result small{grid-column:1;font-size:10px;color:var(--muted)}
+.mylist-add-word{grid-column:2;grid-row:1/3;font-size:11px;font-weight:600;color:var(--green)}.mylist-result:disabled .mylist-add-word{color:var(--muted)}
+.mylist-row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.6fr) 118px 31px;align-items:center;gap:6px 16px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.mylist-who strong,.mylist-price strong{display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mylist-who small,.mylist-price small{display:block;margin-top:4px;font-size:10px;color:var(--muted)}
+.mylist-price{font-variant-numeric:tabular-nums}.mylist-error{font-size:11px;color:var(--muted)}
+.mylist-risk{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:20px;font-size:11px;font-weight:600;justify-self:start}
+.mylist-risk b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;color:#fff;font-size:12px}
+.risk-0{background:var(--bg);color:var(--muted)}.risk-0 b{background:var(--muted)}
+.risk-1,.risk-2{background:var(--green-soft);color:var(--green)}.risk-1 b,.risk-2 b{background:var(--green)}
+.risk-3{background:#f5edd8;color:#8a6a1f}.risk-3 b{background:#b8902f}
+.risk-4,.risk-5{background:#f8e7e4;color:#a2453c}.risk-4 b,.risk-5 b{background:var(--red)}.risk-5{outline:1px solid var(--red)}
+:root[data-theme="nuit"] .risk-3{background:#3b3420;color:#e7c873}:root[data-theme="nuit"] .risk-4,:root[data-theme="nuit"] .risk-5{background:#432a28;color:#f3a69f}
+.mylist-why{grid-column:1/-1;font-size:11px;color:var(--muted);line-height:1.6}
+.mylist-ideas{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:0 20px 30px}.mylist-chip{padding:9px 14px;border-radius:20px;background:var(--green-soft);color:var(--green);border:1px solid var(--line);font-size:12px;font-weight:600}
+.mylist-loading{padding:30px 20px;text-align:center;color:var(--muted);font-size:12px}.mylist-note{margin:14px 4px 0!important}
+@media(max-width:600px){.mylist-add{padding:14px}.mylist-row{grid-template-columns:minmax(0,1fr) auto 31px;padding:14px;gap:8px 10px}.mylist-who{grid-column:1/2}.mylist-risk{grid-column:2;grid-row:1}.mylist-row>.icon-button{grid-column:3;grid-row:1}.mylist-price{grid-column:1/-1}.mylist-risk{padding:4px 9px 4px 4px;font-size:10px}}

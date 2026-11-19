@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 SYMBOL = re.compile(r"[A-Z0-9][A-Z0-9._-]{0,31}_[A-Z0-9]{2,12}\Z")
+STOCK_SYMBOL = re.compile(r"[A-Z0-9][A-Z0-9.\-]{0,14}\Z")
 
 
 class DeskStore:
@@ -21,6 +22,8 @@ class DeskStore:
         with self.connection() as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS watchlist(symbol TEXT PRIMARY KEY, created_at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS stock_watchlist(symbol TEXT PRIMARY KEY, name TEXT NOT NULL,
+                    created_at TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY, created_at TEXT NOT NULL,
                     kind TEXT NOT NULL, message TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS cryptocom_portfolio_snapshots(
@@ -90,6 +93,34 @@ class DeskStore:
                 db.execute("INSERT INTO activity(created_at,kind,message) VALUES(?,?,?)",
                            (self.now(), "WATCHLIST", f"{symbol} {'ajoutée aux' if enabled else 'retirée des'} favoris."))
         return self.watchlist()
+
+    def stock_watchlist(self):
+        with self.connection() as db:
+            return [{"symbol": row[0], "name": row[1]} for row in
+                    db.execute("SELECT symbol,name FROM stock_watchlist ORDER BY created_at,symbol")]
+
+    def set_stock_watch(self, symbol: str, name: str, enabled: bool):
+        if (not isinstance(symbol, str) or not STOCK_SYMBOL.fullmatch(symbol) or type(enabled) is not bool
+                or not isinstance(name, str)):
+            raise ValueError("Action invalide.")
+        name = " ".join(name.split())[:80] or symbol
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = db.execute("SELECT 1 FROM stock_watchlist WHERE symbol=?", (symbol,)).fetchone() is not None
+            if enabled and not previous:
+                if db.execute("SELECT COUNT(*) FROM stock_watchlist").fetchone()[0] >= 50:
+                    raise ValueError("La liste est limitée à 50 actions.")
+                db.execute("INSERT INTO stock_watchlist VALUES(?,?,?)", (symbol, name, self.now()))
+            elif not enabled:
+                db.execute("DELETE FROM stock_watchlist WHERE symbol=?", (symbol,))
+            if previous != enabled:
+                db.execute("INSERT INTO activity(created_at,kind,message) VALUES(?,?,?)",
+                           (self.now(), "WATCHLIST", f"{symbol} {'ajoutée à' if enabled else 'retirée de'} ma liste."))
+        return self.stock_watchlist()
+
+    def my_list(self):
+        return ([{"kind": "crypto", "symbol": s, "name": s.split("_", 1)[0]} for s in self.watchlist()]
+                + [{"kind": "action", **item} for item in self.stock_watchlist()])
 
     @staticmethod
     def now():
