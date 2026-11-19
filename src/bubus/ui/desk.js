@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit', 'prune', 'sable']);
+  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit', 'prune', 'sable', 'neon', 'coeur', 'cuivre', 'iris']);
   function applyTheme(theme) {
     const selected = themeChoices.has(theme) ? theme : 'nuit';
     document.documentElement.dataset.theme = selected;

@@ -105,6 +105,7 @@ class DeskHandler(MarketDashboardHandler):
                  "/assets/desk.js": ("desk.js", "text/javascript; charset=utf-8"),
                  "/assets/ai-connections.js": ("ai-connections.js", "text/javascript; charset=utf-8"),
                  "/assets/icon.svg": ("icon.svg", "image/svg+xml"),
+                 "/assets/bubus-banner.jpg": ("bubus-banner.jpg", "image/jpeg"),
                  "/assets/icon-192.png": ("icon-192.png", "image/png"),
                  "/assets/icon-512.png": ("icon-512.png", "image/png"),
                  "/assets/icon-maskable-512.png": ("icon-maskable-512.png", "image/png"),
