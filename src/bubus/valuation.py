@@ -30,6 +30,28 @@ def yahoo(symbol):
         return None, None, None
 
 
+_stock_lock = Lock()
+_stock_cache = []
+_stock_expiry = 0
+STOCKS = {"AAPL": "Apple", "MSFT": "Microsoft", "AIR.PA": "Airbus",
+          "NVDA": "Nvidia", "OR.PA": "L’Oréal", "MC.PA": "LVMH"}
+
+
+def stock_market():
+    global _stock_cache, _stock_expiry
+    with _stock_lock:
+        if time.monotonic() >= _stock_expiry:
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                quotes = pool.map(yahoo, STOCKS)
+                _stock_cache = [
+                    dict(symbol=symbol, name=name, price=str(price) if price else None,
+                         currency=currency, stamp=stamp)
+                    for (symbol, name), (price, stamp, currency) in zip(STOCKS.items(), quotes)
+                ]
+            _stock_expiry = time.monotonic() + 55
+        return _stock_cache
+
+
 def valuation():
     global _cached, _expires
     with _lock:

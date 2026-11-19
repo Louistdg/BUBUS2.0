@@ -311,3 +311,15 @@ body[data-mode="cloud"] .live-signal-panel{display:none}
 #view-markets .summary-card strong, #market-rows .number {font-variant-numeric: tabular-nums;}
 #view-markets #ai-home-slot {margin-top: 24px;}
 #view-markets .market-card {border-radius: 16px;}
+
+.equity-card {padding:20px;margin-bottom:18px}
+.equity-heading {display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.equity-heading small,#equity-quotes small {color:var(--muted)}
+#equity-quotes {display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px}
+#equity-quotes article {display:grid;gap:6px;background:var(--surface-soft);border:1px solid var(--line);padding:12px;border-radius:12px}
+#equity-quotes b {font-size:1.2rem;font-variant-numeric:tabular-nums}
+#equity-quotes small {font-size:.7rem}
+:root[data-theme="prune"] {color-scheme:dark;--bg:#201826;--ink:#f4eafa;--white:#302437;--surface:#302437;--surface-soft:#382a40;--surface-hover:#45334d;--line:#604967;--muted:#c5b1cb;--green:#deb2ef;--green-soft:#50375b;--sidebar:#25182d;--surface-selected:#51395e}
+:root[data-theme="sable"] {color-scheme:light;--bg:#f6f0e7;--ink:#382d24;--white:#fffbf4;--surface:#fffbf4;--surface-soft:#f6eee0;--surface-hover:#f2e5d2;--line:#d9cbb9;--muted:#725f51;--green:#944929;--green-soft:#f3dece;--sidebar:#402c25;--surface-selected:#efdbcc}
+.new-swatch.prune,:root[data-theme="prune"] #view-markets .market-hero {background:linear-gradient(115deg,#291d32,#694878)}
+.new-swatch.sable,:root[data-theme="sable"] #view-markets .market-hero {background:linear-gradient(115deg,#483224,#905335)}

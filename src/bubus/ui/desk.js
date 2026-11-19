@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit']);
+  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit', 'prune', 'sable']);
   function applyTheme(theme) {
     const selected = themeChoices.has(theme) ? theme : 'nuit';
     document.documentElement.dataset.theme = selected;
@@ -1451,4 +1451,36 @@
   view(location.hash.slice(1)); refreshGecko();
   setInterval(refreshGecko, 60000);
 
+})();
+
+(() => {
+  const panel = document.getElementById('equity-quotes');
+  let loading = false;
+  async function update() {
+    if (loading || document.hidden || document.getElementById('view-markets').hidden) return;
+    loading = true;
+    try {
+      const response = await fetch('/api/desk/actions', {cache: 'no-store'});
+      if (!response.ok) throw new Error();
+      const rows = await response.json();
+      panel.replaceChildren(...rows.map(row => {
+        const card = document.createElement('article');
+        const name = document.createElement('strong');
+        const price = document.createElement('b');
+        const details = document.createElement('small');
+        name.textContent = row.name;
+        price.textContent = row.price ? Number(row.price).toLocaleString('fr-FR', {style:'currency',currency:row.currency}) : 'Indisponible';
+        details.textContent = row.symbol + (row.stamp ? ' · ' + new Date(row.stamp * 1000).toLocaleString('fr-FR', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '');
+        card.append(name, price, details);
+        return card;
+      }));
+    } catch {
+      if (!panel.children.length) panel.textContent = 'Cours momentanément indisponibles.';
+    } finally { loading = false; }
+  }
+  new MutationObserver(update).observe(document.getElementById('view-markets'), {attributes:true,attributeFilter:['hidden']});
+  document.getElementById('refresh').addEventListener('click', update);
+  document.addEventListener('visibilitychange', update);
+  setInterval(update, 60000);
+  update();
 })();
