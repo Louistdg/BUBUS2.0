@@ -54,7 +54,7 @@ class DeskTests(unittest.TestCase):
         self.assertIn('id="observer-key-form"', html)
         self.assertIn('id="observer-start"', html)
         self.assertIn("risk-limits-form", html)
-        self.assertEqual(html.count('data-theme-choice='), 4)
+        self.assertEqual(html.count('data-theme-choice='), 6)
         self.assertIn('data-theme-choice="nuit" aria-pressed="true"', html)
         self.assertIn('aria-label="Thème de couleurs"', html)
         with urlopen(self.url + "/assets/desk.css") as response:
