@@ -24,6 +24,7 @@ from bubus.server import ASSETS, DeskHandler, make_server
 
 
 _AUTHENTICATED_GET_PATHS = frozenset({
+    "/patrimoine", "/assets/finance.css", "/assets/finance.js", "/assets/finance-chart.js", "/assets/finance-icons.js",
     "/", "/assets/desk.css", "/assets/desk.js", "/assets/ai-connections.js", "/api/desk/ai-connections",
     "/api/desk/state", "/api/market-data/crypto-overview",
     "/api/market-data/coingecko-overview", "/api/market-data/state",

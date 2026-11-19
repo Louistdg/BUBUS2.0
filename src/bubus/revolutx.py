@@ -81,27 +81,33 @@ def _request(api_key, signer, path, query=''):
         conn.close()
 
 
-def _orders(token, signer, kind):
+def _activity(token, signer, kind):
     from urllib.parse import urlencode
     rows = []
     cursor = None
-    fields = ("symbol", "side", "state", "order_state", "order_type", "created_date",
+    route = "/api/1.0/transactions" if kind == "transactions" else "/api/1.0/orders/" + kind
+    fields = ("type", "status", "processed_date", "symbol", "side", "state", "order_state", "order_type", "created_date",
               "updated_date", "price", "quantity", "filled_quantity", "average_fill_price")
     try:
         for _ in range(10):
             query = urlencode({"limit": 100, **({"cursor": cursor} if cursor else {})})
-            page = _request(token, signer, "/api/1.0/orders/" + kind, query)
+            page = _request(token, signer, route, query)
             if not isinstance(page, dict) or not isinstance(page.get("data"), list):
                 raise DiagnosticError("Format des ordres inattendu.")
             for row in page["data"]:
                 if isinstance(row, dict):
-                    rows.append({key: row[key] for key in fields if key in row})
+                    entry = {key: row[key] for key in fields if key in row}
+                    for side in ("source", "destination"):
+                        leg = row.get(side)
+                        if isinstance(leg, dict):
+                            entry[side] = f"{leg.get('amount', '?')} {leg.get('currency', '')}"
+                    rows.append(entry)
             cursor = (page.get("metadata") or {}).get("next_cursor")
             if not cursor:
                 break
         return {"rows": rows, "partial": bool(cursor)}
     except (DiagnosticError, OSError, ValueError, http.client.HTTPException):
-        return {"rows": rows, "partial": True, "error": "Lecture des ordres incomplète."}
+        return {"rows": rows, "partial": True, "error": "Lecture des opérations incomplète."}
 
 
 def snapshot():
@@ -127,7 +133,8 @@ def snapshot():
             raise DiagnosticError("Format des soldes inattendu.")
         balances = [{key: str(row.get(key, "—")) for key in ("currency", "available", "total")} for row in payload]
         return {"connected": True, "balances": balances,
-                "active": _orders(token, signer, "active"), "historical": _orders(token, signer, "historical"),
+                "transactions": _activity(token, signer, "transactions"),
+                "active": _activity(token, signer, "active"), "historical": _activity(token, signer, "historical"),
                 "observed": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")}
     except DiagnosticError as exc:
         return {"connected": False, "reason": str(exc)}

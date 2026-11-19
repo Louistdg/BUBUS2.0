@@ -163,7 +163,7 @@ def market_snapshot(server: Any, *, global_limit: int = 250) -> str:
     if portfolio["connected"]:
         lines.append("Revolut X connecté en lecture. Soldes (actif, total, disponible) :")
         lines.extend(f"{r['currency']} : {r['total']}, {r['available']}" for r in portfolio["balances"])
-        for key, label in (("active", "Ordres ouverts"), ("historical", "Historique des ordres")):
+        for key, label in (("transactions", "Transactions"), ("active", "Ordres ouverts"), ("historical", "Historique des ordres")):
             section = portfolio.get(key)
             if section is not None:
                 lines.append(f"{label} Revolut X : {len(section['rows'])} reçus" +

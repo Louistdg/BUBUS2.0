@@ -96,6 +96,11 @@ class DeskHandler(MarketDashboardHandler):
             return self._send_json(403, {"error": "Accès local uniquement."})
         parts = urlsplit(self.path)
         files = {"/": ("index.html", "text/html; charset=utf-8"),
+                 "/patrimoine": ("finance.html", "text/html; charset=utf-8"),
+                 "/assets/finance.css": ("finance.css", "text/css; charset=utf-8"),
+                 "/assets/finance.js": ("finance.js", "text/javascript; charset=utf-8"),
+                 "/assets/finance-chart.js": ("finance-chart.js", "text/javascript; charset=utf-8"),
+                 "/assets/finance-icons.js": ("finance-icons.js", "text/javascript; charset=utf-8"),
                  "/assets/desk.css": ("desk.css", "text/css; charset=utf-8"),
                  "/assets/desk.js": ("desk.js", "text/javascript; charset=utf-8"),
                  "/assets/ai-connections.js": ("ai-connections.js", "text/javascript; charset=utf-8"),
