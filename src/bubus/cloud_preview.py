@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import html
+import json
 import os
 import secrets
 import threading
@@ -18,6 +19,7 @@ from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from bubus.chatgpt_signin import ChatGPTSignIn, ChatGPTSignInError
 from bubus.server import ASSETS, DeskHandler, make_server
 
 
@@ -72,6 +74,45 @@ def session_token_valid(token: str, now: float | None = None) -> bool:
     if not hmac.compare_digest(signature, expected):
         return False
     return int(expires) > (now if now is not None else time.time())
+
+
+CHATGPT_CALLBACK = "/auth/chatgpt/callback"
+
+
+class _CloudTokenProtector:
+    available = True
+
+    def __init__(self):
+        from cryptography.fernet import Fernet
+        username, _ = _credentials()
+        context = ("bubus/chatgpt/web/v1/" + username).encode()
+        key = hmac.digest(_session_secret(), context, "sha256")
+        self._cipher = Fernet(base64.urlsafe_b64encode(key))
+
+    def protect(self, data):
+        return self._cipher.encrypt(data)
+
+    def unprotect(self, data):
+        from cryptography.fernet import InvalidToken
+        try:
+            return self._cipher.decrypt(data)
+        except InvalidToken:
+            raise ChatGPTSignInError("Reconnecte ton compte ChatGPT.") from None
+
+
+def hosted_chatgpt(data_dir):
+    client_id = os.environ.get("BUBUS_CHATGPT_CLIENT_ID", "").strip()
+    redirect = os.environ.get("BUBUS_CHATGPT_REDIRECT_URI", "").strip()
+    if not redirect and os.environ.get("RAILWAY_PUBLIC_DOMAIN"):
+        redirect = "https://" + os.environ["RAILWAY_PUBLIC_DOMAIN"] + CHATGPT_CALLBACK
+    url = urlsplit(redirect)
+    if (not client_id or client_id == "dynamic_agent_client" or url.scheme != "https"
+            or not url.hostname or url.username or url.password or url.query or url.fragment
+            or url.path != CHATGPT_CALLBACK):
+        return None
+    return ChatGPTSignIn(Path(data_dir) / "chatgpt-web", protector=_CloudTokenProtector(),
+                         web_client_id=client_id, web_redirect_uri=redirect,
+                         web_client_secret=os.environ.get("BUBUS_CHATGPT_CLIENT_SECRET", ""))
 
 
 class LoginThrottle:
@@ -236,6 +277,16 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
     # --- GET ------------------------------------------------------------
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
+        if path == CHATGPT_CALLBACK and self.server.chatgpt_signin and self._https_ok():
+            # Le navigateur revient d’OpenAI sans son cookie Strict. Cette page fixe
+            # termine l’échange par POST sur la même origine, avec le cookie BUBUS.
+            return self._send_html(200, '<!doctype html><html lang="fr"><meta charset="utf-8">'
+                                   '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                                   '<title>Connexion ChatGPT · BUBUS</title><p id="status">Connexion en cours…</p>'
+                                   '<script src="/assets/chatgpt-return.js" defer></script>'
+                                   '<a href="/#chat">Revenir à la discussion</a></html>')
+        if path == "/assets/chatgpt-return.js" and self.server.chatgpt_signin:
+            return self._send_file(ASSETS / "chatgpt-return.js", "text/javascript; charset=utf-8")
         if path == "/healthz":
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -305,6 +356,37 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
         LOGIN_THROTTLE.succeed(client)
         return self._redirect("/", self._session_cookie(issue_session_token(), SESSION_SECONDS))
 
+    def _chatgpt_action(self, path):
+        cookie = self._cookie(SESSION_COOKIE)
+        if not self._same_site_write() or not session_token_valid(cookie):
+            return self._reject_post(403, "Rouvre la discussion dans BUBUS et reconnecte-toi.")
+        signin = self.server.chatgpt_signin
+        if signin is None:
+            return self._reject_post(503, "La connexion ChatGPT attend son activation pour BUBUS en ligne.")
+        size = self.headers.get("Content-Length", "")
+        if (self.headers.get_content_type() != "application/json" or not size.isdecimal()
+                or len(size) > 5 or not 1 <= int(size) <= 8192):
+            return self._reject_post(400, "Demande de connexion invalide.")
+        try:
+            data = json.loads(self.rfile.read(int(size)))
+            if not isinstance(data, dict) or not all(isinstance(v, str) for v in data.values()):
+                raise ValueError
+            session = hashlib.sha256(cookie.encode("ascii")).hexdigest()
+            if path.endswith("/connect"):
+                result = {"authorize_url": signin.start(self.server.server_port, browser_session=session)}
+            elif path.endswith("/finish"):
+                result = signin.finish(data, browser_session=session)
+            else:
+                signin.disconnect()
+                result = signin.state()
+        except ChatGPTSignInError as exc:
+            return self._reject_post(exc.status, str(exc))
+        except (ValueError, UnicodeError):
+            return self._reject_post(400, "Demande de connexion invalide.")
+        except OSError:
+            return self._reject_post(503, "Connexion interrompue. Réessaie depuis la discussion.")
+        return self._send_json(200, result)
+
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if path == "/login":
@@ -317,6 +399,8 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
         if not self._authorized():
             self._drain_body()
             return self._auth_required()
+        if path in {"/api/desk/chatgpt/connect", "/api/desk/chatgpt/finish", "/api/desk/chatgpt/disconnect"}:
+            return self._chatgpt_action(path)
         if path == "/api/desk/chat":
             if not self._same_site_write():
                 self._drain_body()
@@ -364,7 +448,7 @@ def main() -> int:
     default_dir = str(Path(volume) / "bubus") if volume else "/tmp/bubus-preview"
     data_dir = Path(os.environ.get("BUBUS_PREVIEW_DATA_DIR", default_dir))
     server = make_server(port, data_dir=data_dir, bind_host="0.0.0.0",
-                         handler_class=AuthenticatedCloudPreviewHandler)
+                         handler_class=AuthenticatedCloudPreviewHandler, chatgpt_signin=hosted_chatgpt(data_dir))
     print("BUBUS2.0 en ligne : marchés publics et discussion IA, en lecture seule.", flush=True)
     try:
         server.serve_forever(poll_interval=0.25)

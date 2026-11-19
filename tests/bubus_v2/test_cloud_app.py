@@ -9,6 +9,7 @@ import threading
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
+from urllib.parse import parse_qsl, urlsplit
 
 from bubus import cloud_preview
 from bubus.assistant_chat import (
@@ -187,6 +188,73 @@ class CloudInstallableAppTests(_ServerCase):
         status, _, _ = self.request("POST", "/api/desk/watchlist", b"{}", {
             "Cookie": cookie, "Content-Type": "application/json", "Origin": f"http://127.0.0.1:{self.port}"})
         self.assertEqual(status, 405)
+
+
+class HostedChatGPTTests(_ServerCase):
+    def setUp(self):
+        super().setUp()
+        from tests.bubus_v2.test_chatgpt_signin import FakeOpenAI
+        self.fake = FakeOpenAI()
+        with patch.dict(os.environ, {"BUBUS_CHATGPT_CLIENT_ID": "oaiapp_test",
+                                     "BUBUS_CHATGPT_REDIRECT_URI": "https://bubus.example/auth/chatgpt/callback",
+                                     "BUBUS_CHATGPT_CLIENT_SECRET": "client-test"}):
+            signin = cloud_preview.hosted_chatgpt(self.tmp.name)
+        signin._http = self.fake.http
+        signin._stream = self.fake.stream
+        signin._jwks = lambda: self.fake.jwks
+        signin._clock = lambda: 1000
+        self.server.chatgpt_signin = signin
+        self.server.chat_service = ChatService(chatgpt=signin)
+        self.cookie = self.session_cookie()
+
+    def action(self, name, data, cookie=None, **headers):
+        return self.request("POST", "/api/desk/chatgpt/" + name, json.dumps(data), {
+            "Cookie": cookie or self.cookie, "Content-Type": "application/json",
+            "Sec-Fetch-Site": "same-origin", **headers})
+
+    def start(self):
+        status, _, body = self.action("connect", {})
+        self.assertEqual(status, 200)
+        params = dict(parse_qsl(urlsplit(json.loads(body)["authorize_url"]).query))
+        self.assertEqual(params["client_id"], "oaiapp_test")
+        self.assertEqual(params["redirect_uri"], "https://bubus.example/auth/chatgpt/callback")
+        self.assertNotIn("ext_agent_host_id", params)
+        self.fake.nonce = params["nonce"]
+        return {"state": params["state"], "code": "c"}
+
+    def test_web_connect_chat_and_disconnect(self):
+        data = self.start()
+        status, headers, page = self.request("GET", "/auth/chatgpt/callback?code=c&state=test")
+        self.assertEqual(status, 200)
+        self.assertIn(b"/assets/chatgpt-return.js", page)
+        self.assertNotIn(b"code=c", page)
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(self.action("finish", data, self.session_cookie())[0], 400)
+        status, _, result = self.action("finish", data)
+        self.assertEqual(status, 200)
+        self.assertTrue(json.loads(result)["plan_enabled"])
+        self.assertNotIn(b"acc-1", result)
+        self.assertTrue(self.fake.calls[0][3]["Authorization"].startswith("Basic "))
+        self.assertEqual(self.action("finish", data)[0], 400)
+        status, _, body = self.request("POST", "/api/desk/chat", json.dumps({
+            "messages": [{"role": "user", "content": "Bonjour"}]}),
+            {"Cookie": self.cookie, "Content-Type": "application/json"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["reply"], "Bonjour Louis")
+        self.assertFalse(json.loads(self.action("disconnect", {})[2])["signed_in"])
+
+    def test_cancel_and_cross_site_requests(self):
+        data = self.start()
+        self.assertEqual(self.action("finish", data, **{"Sec-Fetch-Site": "cross-site"})[0], 403)
+        self.assertEqual(self.action("finish", {"state": data["state"], "error": "access_denied"})[0], 400)
+        self.assertEqual(self.action("finish", data)[0], 400)
+        self.assertFalse(self.fake.calls)
+        self.assertEqual(self.request("POST", "/api/desk/chatgpt/connect", "{}")[0], 401)
+
+    def test_unconfigured_app_does_not_start_authorization(self):
+        self.server.chatgpt_signin = None
+        self.assertEqual(self.action("connect", {})[0], 503)
+        self.assertEqual(self.request("GET", "/auth/chatgpt/callback", headers={"Cookie": self.cookie})[0], 404)
 
 
 class CloudChatTests(_ServerCase):

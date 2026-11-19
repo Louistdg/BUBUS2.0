@@ -76,7 +76,7 @@
       $('chat-status').textContent = info.ready
         ? `${info.provider} · ${info.model} · jusqu’à ${info.daily_limit} messages par jour.`
         : (info.reason || 'L’IA n’est pas encore branchée.');
-      if (!info.ready && info.chatgpt && info.chatgpt.available && document.body.dataset.mode !== 'cloud') {
+      if (!info.ready && info.chatgpt?.available && !info.chatgpt.signed_in) {
         $('chat-status').textContent = 'Branche ton abonnement ChatGPT avec le bouton ci-dessous pour commencer.';
       }
       renderChatGPT(info.chatgpt);
@@ -86,25 +86,28 @@
   function renderChatGPT(info) {
     const box = $('chatgpt-box');
     box.replaceChildren();
-    if (document.body.dataset.mode === 'cloud') {
-      if (chat.ready) { box.hidden = true; return; }
+    const online = document.body.dataset.mode === 'cloud';
+    if (online && !info?.available) {
       box.hidden = false;
-      box.append(node('p', 'Le bouton « Continuer avec ChatGPT » existe seulement sur ton PC : OpenAI ne l’autorise pas encore pour un site en ligne.', 'chatgpt-line'),
-        node('p', 'Sur ton PC : lance bubus.cmd, ouvre l’onglet Discussion et clique sur le bouton. Pour que l’IA réponde aussi ici, il faut une clé Claude ou ChatGPT dans les réglages de Railway.', 'microcopy'));
+      const button = node('button', 'Continuer avec ChatGPT', 'button chatgpt-button');
+      button.type = 'button';
+      button.disabled = true;
+      box.append(button, node('p', 'La connexion de ton compte sera disponible dès que BUBUS sera activé auprès d’OpenAI.', 'microcopy'));
       return;
     }
     if (!info || !info.available) { box.hidden = true; return; }
     box.hidden = false;
-    if (!info.signed_in || !info.plan_enabled) {
+    if (!info.signed_in || !info.plan_enabled || !info.model) {
       const button = node('button', 'Continuer avec ChatGPT', 'button chatgpt-button');
       button.type = 'button';
+      button.setAttribute('data-oai-siwc-button', '');
       button.addEventListener('click', connectChatGPT);
       box.append(button, node('p', info.signed_in
-        ? 'Ton compte est connecté, mais l’utilisation de ton abonnement n’a pas été autorisée. Reconnecte-toi et accepte.'
-        : 'Utilise ton abonnement ChatGPT Plus ou Pro, sans clé et sans frais en plus. La connexion reste sur ce PC.', 'microcopy'));
-      return;
+        ? (info.plan_enabled ? 'Aucun modèle disponible. Réessaie la connexion.' : 'Pour discuter, autorise BUBUS à utiliser ton abonnement sur la page OpenAI.')
+        : (online ? 'OpenAI te demandera si BUBUS peut utiliser ton abonnement pour cette discussion.' : 'La connexion reste sur ce PC.'), 'microcopy'));
+      if (!info.signed_in) return;
     }
-    const line = node('p', `Abonnement ChatGPT utilisé${info.email ? ` · ${info.email}` : ''}${info.model_name ? ` · ${info.model_name}` : ''}`, 'chatgpt-line');
+    const line = node('p', `Compte ChatGPT connecté${info.email ? ` · ${info.email}` : ''}${info.model_name ? ` · ${info.model_name}` : ''}`, 'chatgpt-line');
     const manage = node('a', 'Gérer l’utilisation', 'text-link');
     manage.href = info.usage_url; manage.target = '_blank'; manage.rel = 'noopener noreferrer';
     const out = node('button', 'Déconnecter ChatGPT', 'text-link');
@@ -118,6 +121,7 @@
   async function connectChatGPT() {
     try {
       const {authorize_url: url} = await api('/api/desk/chatgpt/connect', {});
+      if (document.body.dataset.mode === 'cloud') { location.assign(url); return; }
       window.open(url, '_blank', 'noopener');
       $('chat-status').textContent = 'Connecte-toi dans la fenêtre ChatGPT qui vient de s’ouvrir, puis reviens ici.';
       const started = Date.now();

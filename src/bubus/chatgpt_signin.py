@@ -4,7 +4,7 @@ Flux « open source / hébergé localement » d'OpenAI : enregistrement dynamiqu
 (`dynamic_agent_client`), PKCE, retour obligatoire sur 127.0.0.1, puis appels
 `POST /v1/responses` avec le jeton d'accès. Les jetons restent sur ce PC, dans un
 fichier chiffré par Windows (DPAPI, lisible seulement par ce compte Windows).
-Ce module n'est jamais branché dans la version en ligne.
+La version hébergée utilise un client partenaire enregistré et un coffre serveur distinct.
 
 Documentation : https://developers.openai.com/siwc/token-sharing-open-source
 """
@@ -183,8 +183,13 @@ class ChatGPTSignIn:
                  http_json: Callable[..., tuple[int, Any]] = _http_json,
                  stream: Callable[..., tuple[int, list[dict]]] = _stream_responses,
                  jwks_loader: Callable[[], dict] = _fetch_jwks,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time, web_client_id: str = "",
+                 web_redirect_uri: str = "", web_client_secret: str = ""):
         self._dir = Path(data_dir)
+        self._web_client_id = web_client_id
+        self._web_redirect_uri = web_redirect_uri
+        self._web_client_secret = web_client_secret
+        self._session_lock = threading.RLock()
         self._protector = protector or DpapiProtector()
         self._http = http_json
         self._stream = stream
@@ -252,36 +257,48 @@ class ChatGPTSignIn:
         return bool(record and PLAN_SCOPE in record.get("scopes", []) and record.get("model"))
 
     # connexion
-    def start(self, port: int) -> str:
+    def start(self, port: int, *, browser_session: str = "") -> str:
         if not self.available:
             raise ChatGPTSignInError("La connexion ChatGPT n’est possible que sur la version PC (Windows).", 409)
         verifier = secrets.token_urlsafe(64)
         state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
-        redirect_uri = f"http://127.0.0.1:{int(port)}{CALLBACK_PATH}"
+        if self._web_client_id and not browser_session:
+            raise ChatGPTSignInError("Reconnecte-toi à BUBUS avant de continuer.", 401)
+        redirect_uri = self._web_redirect_uri or f"http://127.0.0.1:{int(port)}{CALLBACK_PATH}"
         record = self._load()
-        client_id = record.get("client_id") if record else None
+        client_id = self._web_client_id or (record.get("client_id") if record else None)
         params = {
             "client_id": client_id or "dynamic_agent_client",
-            "ext_agent_host_id": self._host_id(), "response_type": "code", "redirect_uri": redirect_uri,
+            "response_type": "code", "redirect_uri": redirect_uri,
             "scope": SCOPES, "resource": RESOURCE, "state": state, "nonce": nonce,
             "code_challenge_method": "S256",
             "code_challenge": base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode(),
         }
+        if not self._web_client_id:
+            params["ext_agent_host_id"] = self._host_id()
         if not client_id:
             params["agent_name_hint"] = AGENT_NAME
-        elif record.get("email"):
+        elif record and record.get("email"):
             params["login_hint"] = record["email"]
         with self._lock:
             now = self._clock()
             self._pending = {k: v for k, v in self._pending.items() if now - v["created"] < PENDING_SECONDS}
             self._pending[state] = {"verifier": verifier, "nonce": nonce, "redirect_uri": redirect_uri,
-                                    "client_id": client_id, "created": now}
+                                    "client_id": client_id, "browser_session": browser_session, "created": now}
         return AUTHORIZE_URL + "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
 
-    def finish(self, query: dict[str, str]) -> dict[str, Any]:
+    def finish(self, query: dict[str, str], *, browser_session: str = "") -> dict[str, Any]:
+        with self._session_lock:
+            return self._finish(query, browser_session)
+
+    def _finish(self, query: dict[str, str], browser_session: str) -> dict[str, Any]:
         state = query.get("state", "")
         with self._lock:
-            pending = self._pending.pop(state, None)
+            pending = self._pending.get(state)
+            if pending and secrets.compare_digest(pending["browser_session"], browser_session):
+                del self._pending[state]
+            else:
+                pending = None
         if pending is None or self._clock() - pending["created"] > PENDING_SECONDS:
             raise ChatGPTSignInError("Cette tentative de connexion a expiré. Recommence depuis BUBUS.")
         if query.get("error"):
@@ -297,19 +314,23 @@ class ChatGPTSignIn:
             raise ChatGPTSignInError("OpenAI a renvoyé un autre identifiant d’appli : connexion refusée.", 502)
         if not code:
             raise ChatGPTSignInError("OpenAI n’a pas renvoyé de code de connexion.", 502)
-        status, tokens = self._http("POST", TOKEN_URL, form={
+        status, tokens = self._post_token(TOKEN_URL, {
             "grant_type": "authorization_code", "client_id": client_id, "code": code,
             "code_verifier": pending["verifier"], "redirect_uri": pending["redirect_uri"], "resource": RESOURCE})
-        if status != 200 or not isinstance(tokens, dict) or not tokens.get("access_token"):
-            raise ChatGPTSignInError("OpenAI a refusé l’échange du code de connexion. Recommence.", 502)
+        if status != 200 or not isinstance(tokens, dict) or not isinstance(tokens.get("id_token"), str):
+            raise ChatGPTSignInError("OpenAI a refusé la connexion. Réessaie depuis la discussion.", 502)
+        scopes = str(tokens.get("scope", "")).split()
+        if PLAN_SCOPE in scopes and not tokens.get("access_token"):
+            raise ChatGPTSignInError("OpenAI n’a pas accordé l’accès à la discussion.", 403)
         claims = verify_id_token(tokens.get("id_token", ""), client_id=client_id, nonce=pending["nonce"],
                                  jwks=self._jwks(), now=self._clock())
         record = {"client_id": client_id, "subject": claims["sub"], "email": claims.get("email"),
-                  "id_token": tokens.get("id_token"), "access_token": tokens["access_token"],
+                  "access_token": tokens.get("access_token"),
                   "refresh_token": tokens.get("refresh_token"),
                   "expires_at": self._clock() + int(tokens.get("expires_in") or 3600),
-                  "scopes": str(tokens.get("scope", "")).split()}
-        record.update(self._pick_model(record["access_token"]))
+                  "scopes": scopes}
+        if PLAN_SCOPE in record["scopes"]:
+            record.update(self._pick_model(record["access_token"]))
         self._save(record)
         return self.state()
 
@@ -324,14 +345,28 @@ class ChatGPTSignIn:
         return {"model": first.get("slug") or first.get("id"),
                 "model_name": first.get("display_name") or first.get("slug") or first.get("id")}
 
+    def _post_token(self, endpoint: str, form: dict):
+        if self._web_client_secret:
+            credentials = ":".join(urllib.parse.quote_plus(value, safe="") for value in
+                                   (self._web_client_id, self._web_client_secret))
+            auth = base64.b64encode(credentials.encode("ascii")).decode("ascii")
+            return self._http("POST", endpoint, form=form, headers={"Authorization": f"Basic {auth}"})
+        return self._http("POST", endpoint, form=form)
+
     def disconnect(self) -> None:
+        with self._session_lock:
+            with self._lock:
+                self._pending.clear()
+            self._disconnect()
+
+    def _disconnect(self) -> None:
         record = self._load()
         if record and record.get("refresh_token"):
             try:
                 status, discovery = self._http("GET", DISCOVERY_URL)
                 endpoint = discovery.get("revocation_endpoint") if isinstance(discovery, dict) else None
                 if status == 200 and endpoint:
-                    self._http("POST", endpoint, form={"token": record["refresh_token"],
+                    self._post_token(endpoint, {"token": record["refresh_token"],
                                                        "token_type_hint": "refresh_token",
                                                        "client_id": record["client_id"]})
             except Exception:  # noqa: BLE001 - la déconnexion locale doit toujours aboutir
@@ -347,7 +382,7 @@ class ChatGPTSignIn:
             raise ChatGPTSignInError("L’utilisation de ton abonnement n’a pas été autorisée. Reconnecte ChatGPT.", 409)
         if self._clock() < record.get("expires_at", 0) - 120:
             return record
-        status, tokens = self._http("POST", TOKEN_URL, form={
+        status, tokens = self._post_token(TOKEN_URL, {
             "grant_type": "refresh_token", "client_id": record["client_id"],
             "refresh_token": record.get("refresh_token", ""), "resource": RESOURCE})
         if status != 200 or not isinstance(tokens, dict) or not tokens.get("access_token"):
@@ -367,12 +402,22 @@ class ChatGPTSignIn:
         return record
 
     def complete(self, *, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
+        with self._session_lock:
+            record = self._record_for_request()
+        return self._complete(record, system, messages, snapshot)
+
+    def _record_for_request(self) -> dict:
         record = self._fresh_record()
+        if PLAN_SCOPE not in record["scopes"]:
+            raise ChatGPTSignInError("Autorise BUBUS à utiliser ton abonnement ChatGPT.", 403)
         if not record.get("model"):
             record.update(self._pick_model(record["access_token"]))
             if not record.get("model"):
                 raise ChatGPTSignInError("Aucun modèle ChatGPT n’est disponible pour ton compte.", 409)
             self._save(record)
+        return record
+
+    def _complete(self, record: dict, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
         items = [{"role": "developer", "content": system}]
         items += [{"role": m["role"], "content": m["content"]} for m in messages[:-1]]
         items.append({"role": "user", "content": snapshot + "\n\n" + messages[-1]["content"]})

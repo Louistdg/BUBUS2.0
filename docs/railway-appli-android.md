@@ -31,6 +31,18 @@ ni dans un message.
 | `BUBUS_AI_DAILY_MESSAGE_LIMIT` | non | Plafond de messages par jour, 60 par défaut. Il protège ta facture. |
 | `BUBUS_SESSION_SECRET` | non | Secret de signature des sessions (32 caractères minimum). Sans lui, il est dérivé du mot de passe. |
 
+### Connecter ton compte ChatGPT dans Discussion
+
+Enregistre BUBUS auprès d’OpenAI pour la connexion web **et** l’utilisation de l’abonnement dans la discussion. Déclare l’adresse exacte `https://TON-DOMAINE/auth/chatgpt/callback`. Dans les variables Railway du service BUBUS, ajoute les valeurs attribuées à l’application.
+
+| Variable | Valeur |
+|---|---|
+| `BUBUS_CHATGPT_CLIENT_ID` | Identifiant du client web approuvé par OpenAI. |
+| `BUBUS_CHATGPT_REDIRECT_URI` | Adresse HTTPS de retour enregistrée. Facultative si elle correspond au domaine public Railway suivi de `/auth/chatgpt/callback`. |
+| `BUBUS_CHATGPT_CLIENT_SECRET` | Secret fourni par OpenAI pour un client confidentiel utilisant `client_secret_basic`. Laisse cette variable vide pour un client public. |
+
+Dans **Discussion**, appuie sur **Continuer avec ChatGPT**, autorise BUBUS sur la page OpenAI, puis la discussion se rouvre. **Déconnecter ChatGPT** retire le compte de BUBUS. Le service personnel utilise une seule instance Railway et un seul propriétaire. Tous ses appareils connectés à BUBUS partagent cette connexion. Les jetons sont chiffrés sur le serveur. Un volume persistant et un secret de session stable permettent de garder la connexion après les déploiements.
+
 **Limite de dépense** : règle aussi une limite mensuelle directement chez le
 fournisseur (console Anthropic ou OpenAI). Le plafond de BUBUS compte les
 messages, pas les euros.
