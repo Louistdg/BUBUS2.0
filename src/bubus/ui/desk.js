@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit', 'prune', 'sable', 'neon', 'coeur', 'cuivre', 'iris']);
+  const themeChoices = new Set(['clair', 'foret', 'ocean', 'nuit', 'prune', 'sable', 'neon', 'coeur', 'cuivre', 'iris', 'ambre', 'glycine']);
   function applyTheme(theme) {
     const selected = themeChoices.has(theme) ? theme : 'nuit';
     document.documentElement.dataset.theme = selected;
@@ -325,6 +325,14 @@
     if (name === 'portfolio') refreshRevolut();
   }
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => view(button.dataset.view)));
+  const marketPanelButtons = document.querySelectorAll('.market-switch button');
+  marketPanelButtons.forEach(button => button.addEventListener('click', () => {
+    $('view-markets').dataset.marketPanel = button.dataset.marketPanel;
+    marketPanelButtons.forEach(option => option.setAttribute('aria-pressed', String(option === button)));
+  }));
+  document.querySelectorAll('.mobile-more button').forEach(button => {
+    button.addEventListener('click', () => { button.closest('details').open = false; });
+  });
   $('connection-shortcut').addEventListener('click', () => view('settings'));
   window.addEventListener('hashchange', () => view(location.hash.slice(1)));
   const clock = () => {$('clock').textContent = new Date().toLocaleTimeString('fr-BE', {
@@ -380,9 +388,9 @@
           : 'Règles Spot officielles indisponibles'));
       }
       identity.append(coin, description); identityCell.append(identity); row.append(identityCell);
-      const priceCell = node('td', `${format(market.price)} ${market.currency}`, 'number');
+      const priceCell = node('td', `${format(market.price)} ${market.currency}`, 'number market-price');
       row.append(priceCell);
-      row.append(node('td', changeText(market.change_24h_pct), `number ${market.change_24h_pct === null ? '' : Number(market.change_24h_pct) >= 0 ? 'positive' : 'negative'}`));
+      row.append(node('td', changeText(market.change_24h_pct), `number market-change ${market.change_24h_pct === null ? '' : Number(market.change_24h_pct) >= 0 ? 'positive' : 'negative'}`));
       const providerTimeCell = node('td', hour(market.provider_timestamp));
       row.append(node('td', compact(market.volume_24h_usd) + ' $', 'number'), providerTimeCell);
       if (exchange) state.marketRows.set(market.symbol, {price: priceCell, providerTime: providerTimeCell});

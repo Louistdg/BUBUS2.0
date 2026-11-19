@@ -344,3 +344,91 @@ body, button, input, select, textarea {font-family:Inter,"Segoe UI",system-ui,sa
 
 :root[data-theme="iris"]{color-scheme:light;--bg:#F3F0FA;--surface:#FEFDFF;--white:#FEFDFF;--surface-soft:#E8E1F3;--line:#877F91;--ink:#292039;--muted:#65596F;--green:#6E439B;--green-soft:#E8DCF3;--sidebar:#FEFDFF;--sidebar-text:#292039;--sidebar-muted:#65596F;--sidebar-active:#E8DCF3;--sidebar-active-text:#6E439B;--surface-hover:#E8E1F3;--surface-selected:#E8DCF3;--chart-line:#6E439B;}
 .swatch-iris {background:linear-gradient(115deg,#F3F0FA 33%,#6E439B 33% 66%,#E8E1F3 66%)}
+
+/* Variantes de Cuivre et d’Iris */
+:root[data-theme="ambre"], :root[data-theme="glycine"] {
+  --white: var(--surface);
+  --input-surface: var(--surface);
+  --surface-hover: var(--surface-soft);
+  --surface-selected: var(--green-soft);
+  --sidebar: var(--surface);
+  --sidebar-raised: var(--surface-soft);
+  --sidebar-border: var(--line);
+  --sidebar-text: var(--ink);
+  --sidebar-muted: var(--muted);
+  --sidebar-active: var(--green-soft);
+  --sidebar-active-text: var(--green);
+  --chart-line: var(--green);
+}
+:root[data-theme="ambre"] {
+  color-scheme: dark;
+  --bg:#1d1810; --surface:#292216; --surface-soft:#372d1b; --line:#6d5b3c;
+  --ink:#fff1d8; --muted:#c6b79b; --green:#f9c56e; --green-soft:#45351a; --red:#ffa39b;
+}
+:root[data-theme="glycine"] {
+  color-scheme: light;
+  --bg:#f5f3fc; --surface:#fefcff; --surface-soft:#ebe8fb; --line:#c4bddc;
+  --ink:#282340; --muted:#625b77; --green:#5143a3; --green-soft:#e6e0fa; --red:#a73544;
+}
+.swatch-ambre {background:linear-gradient(115deg,#1d1810 33%,#f9c56e 33% 66%,#372d1b 66%)}
+.swatch-glycine {background:linear-gradient(115deg,#f5f3fc 33%,#5143a3 33% 66%,#ebe8fb 66%)}
+.mobile-brand, .mobile-more, .sidebar nav .mobile-patrimoine, .market-switch {display:none}
+
+@media (max-width: 600px) {
+  :root[data-theme="nuit"] {
+    --bg:#101726; --surface:#151e2f; --surface-soft:#202b40; --line:#35445a;
+    --ink:#f0f5fc; --muted:#abb9cb; --green:#46e3c0; --green-soft:#153d3b;
+    --sidebar:#101726; --sidebar-active:#153d3b; --sidebar-active-text:#46e3c0;
+  }
+  :root[data-theme="sable"] {
+    --bg:#f8f1e6; --surface:#fff9ee; --surface-soft:#f0e6d8; --line:#d6c9b8;
+    --ink:#172d25; --muted:#625a50; --green:#0d5c44; --green-soft:#dcebe0;
+    --sidebar:#fff9ee; --sidebar-text:#172d25; --sidebar-active:#dcebe0; --sidebar-active-text:#0d5c44;
+  }
+  .topbar .breadcrumb, .topbar .local-indicator {display:none}
+  .topbar-right {gap:4px}
+  #connection-shortcut {min-width:44px;min-height:44px}
+  .mobile-brand {display:flex;align-items:center;gap:10px;color:var(--ink);font-size:18px;font-weight:800;text-decoration:none}
+  .mobile-brand img {border-radius:50%}
+  .mobile-more {display:block;position:relative;color:var(--ink)}
+  .mobile-more summary {display:grid;min-width:44px;min-height:44px;place-items:center;cursor:pointer;font-size:23px;list-style:none}
+  .mobile-more summary::-webkit-details-marker {display:none}
+  .mobile-more div {position:absolute;right:0;top:100%;min-width:180px;padding:6px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+  .mobile-more button {display:block;width:100%;min-height:44px;text-align:left;padding:0 10px;background:transparent;color:var(--ink);border:0}
+  .sidebar nav .nav-item:is([data-view="portfolio"],[data-view="activity"],[data-view="autopilot"],[data-view="settings"]) {display:none}
+  .sidebar nav .mobile-patrimoine {display:flex;text-decoration:none}
+  .sidebar nav .nav-item {font-size:11px;min-height:50px}
+  .sidebar nav .nav-count {display:none}
+  #view-markets .market-hero {background:transparent;color:var(--ink);min-height:0;padding:0;margin-bottom:16px;align-items:center}
+  #view-markets .market-hero::before, #view-markets .wealth-link, #view-markets .summary-grid {display:none}
+  #view-markets .market-hero .button {align-self:center;min-height:44px}
+  .market-switch {display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--surface-soft);border:1px solid var(--line);border-radius:14px;padding:4px;margin-bottom:12px}
+  .market-switch button {min-height:44px;border:0;border-radius:10px;background:transparent;color:var(--ink);font-size:15px;font-weight:700}
+  .market-switch button[aria-pressed="true"] {background:var(--green-soft);color:var(--green);box-shadow:inset 0 0 0 1px var(--green)}
+  #view-markets[data-market-panel="crypto"] .equity-card,
+  #view-markets[data-market-panel="equity"] .market-card {display:none}
+  #view-markets .market-card {border:0;background:transparent;box-shadow:none;overflow:visible}
+  #view-markets .market-toolbar {padding:0 0 8px;border:0}
+  .market-toolbar .tabs {display:none}
+  .market-toolbar .table-controls {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,42%);width:100%;gap:8px}
+  .market-toolbar :is(.search-box,select) {min-width:0;min-height:44px}
+  .market-toolbar input {min-width:0;width:100%}
+  #view-markets .table-scroll {max-height:none;overflow:visible}
+  .market-card thead {position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden}
+  #market-rows tr {display:grid;grid-template-columns:44px minmax(0,1fr) auto;grid-template-rows:auto auto;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+  #market-rows td {border:0;padding:0}
+  #market-rows .favorite-col {grid-column:1;grid-row:1 / span 2;padding:0!important;width:auto}
+  #market-rows .favorite-button {width:44px;height:44px;font-size:21px}
+  #market-rows td:nth-child(2) {grid-column:2;grid-row:1 / span 2;min-width:0;padding-right:8px}
+  #market-rows .market-price {grid-column:3;grid-row:1;align-self:end;font-size:14px;font-weight:750;color:var(--ink)}
+  #market-rows .market-change {grid-column:3;grid-row:2;align-self:start}
+  #market-rows :is(.table-empty,td:first-child:not(.favorite-col)) {grid-column:1 / -1;padding:12px 0}
+  .market-identity {min-width:0;gap:7px}
+  .market-identity div {min-width:0}
+  .market-identity strong {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+  .market-identity small {display:block;color:var(--muted)}
+  .market-identity .mini-coin {flex:none;width:28px;height:28px}
+  #equity-quotes {grid-template-columns:minmax(0,1fr)}
+  #equity-quotes article {grid-template-columns:minmax(0,1fr) auto}
+  #equity-quotes article small {grid-column:1 / -1}
+}

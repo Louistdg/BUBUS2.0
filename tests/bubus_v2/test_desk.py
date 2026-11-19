@@ -54,7 +54,10 @@ class DeskTests(unittest.TestCase):
         self.assertIn('id="observer-key-form"', html)
         self.assertIn('id="observer-start"', html)
         self.assertIn("risk-limits-form", html)
-        self.assertEqual(html.count('data-theme-choice='), 10)
+        self.assertEqual(html.count('data-theme-choice='), 12)
+        for theme in ('ambre', 'glycine'):
+            self.assertIn(f'data-theme-choice="{theme}"', html)
+            self.assertIn(f':root[data-theme="{theme}"]', css)
         self.assertIn('data-theme-choice="nuit" aria-pressed="true"', html)
         self.assertIn('aria-label="Thème de couleurs"', html)
         with urlopen(self.url + "/assets/desk.css") as response:
