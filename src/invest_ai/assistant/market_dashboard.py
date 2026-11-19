@@ -82,7 +82,7 @@ class MarketDashboardHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
-        self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self' https://*.tradingview.com https://*.tradingview-widget.com; style-src 'self' 'unsafe-inline' https://*.tradingview.com; script-src 'self' https://s3.tradingview.com https://widgets.tradingview-widget.com; img-src 'self' data: https://*.tradingview.com https://*.tradingview-widget.com; frame-src https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; connect-src 'self' https://*.tradingview.com https://*.tradingview-widget.com; style-src 'self' 'unsafe-inline' https://*.tradingview.com; script-src 'self' https://s3.tradingview.com https://widgets.tradingview-widget.com; img-src 'self' data: https://coin-images.coingecko.com https://assets.coingecko.com https://*.tradingview.com https://*.tradingview-widget.com; frame-src https://*.tradingview.com https://*.tradingview-widget.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 
     def _reject_post(self, status: int, message: str) -> None:
         self.close_connection = True
