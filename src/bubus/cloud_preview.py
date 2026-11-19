@@ -28,7 +28,7 @@ _AUTHENTICATED_GET_PATHS = frozenset({
     "/api/desk/state", "/api/market-data/crypto-overview",
     "/api/market-data/coingecko-overview", "/api/market-data/state",
     "/api/desk/candles", "/api/desk/research", "/api/desk/chat",
-    "/api/desk/my-list", "/api/desk/my-list/search",
+    "/api/desk/revolutx", "/api/desk/my-list", "/api/desk/my-list/search",
 })
 # Fichiers d'installation de l'appli : le navigateur les télécharge sans cookie.
 _PUBLIC_GET_PATHS = frozenset({

@@ -48,6 +48,11 @@ class _ServerCase(unittest.TestCase):
     handler_class = AuthenticatedCloudPreviewHandler
 
     def setUp(self):
+        wallet = patch("bubus.revolutx.snapshot", return_value={
+            "connected": True, "balances": [{"currency": "EUR", "available": "8", "total": "10"}],
+            "observed": "2026-11-19T10:00:00+00:00"})
+        wallet.start()
+        self.addCleanup(wallet.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.env = patch.dict(os.environ, {"BUBUS_PREVIEW_USERNAME": "owner", "BUBUS_PREVIEW_PASSWORD": PASSWORD})
         self.env.start()
@@ -273,6 +278,12 @@ class CloudChatTests(_ServerCase):
         self.assertEqual(self.chat(payload, cookie, origin="https://evil.example")[0], 403)
         self.assertEqual(self.ai.calls, [])
 
+    def test_wallet_requires_login(self):
+        self.assertEqual(self.request("GET", "/api/desk/revolutx")[0], 401)
+        status, _, body = self.request("GET", "/api/desk/revolutx", headers={"Cookie": self.session_cookie()})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["balances"][0]["total"], "10")
+
     def test_chat_replies_with_market_snapshot_and_no_orders(self):
         cookie = self.session_cookie()
         status, _, body = self.request("GET", "/api/desk/chat", headers={"Cookie": cookie})
@@ -288,7 +299,7 @@ class CloudChatTests(_ServerCase):
         self.assertIn("Ma liste", call["snapshot"])
         self.assertNotIn("Crypto.com", call["snapshot"])
         self.assertIn("Bitcoin", call["snapshot"])
-        self.assertIn("portefeuille", call["snapshot"])
+        self.assertIn("EUR : 10, 8", call["snapshot"])
         self.assertEqual(call["messages"][-1]["content"], "Comment va le Bitcoin ?")
         self.assertNotIn("test-key", body.decode())
 
@@ -398,7 +409,9 @@ class ChatServiceTests(unittest.TestCase):
             cryptocom_market_overview = Broken()
             coingecko_market_overview = FakeCoinGeckoOverview()
 
-        text = market_snapshot(Server())
+        with patch("bubus.revolutx.snapshot", return_value={"connected": False, "reason": "Hors ligne"}):
+            text = market_snapshot(Server())
+        self.assertIn("Hors ligne", text)
         self.assertIn("indisponibles", text)
         self.assertIn("Bitcoin", text)
 

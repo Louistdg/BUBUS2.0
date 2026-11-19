@@ -50,10 +50,36 @@
   };
   // --- Discussion IA (lecture seule) ---------------------------------------
   const chat = {messages: [], busy: false, ready: false, stateLoaded: false};
-  try { const saved = JSON.parse(localStorage.getItem('bubus.chat') || '[]');
-    if (Array.isArray(saved)) chat.messages = saved.filter(m => m && (m.role === 'user' || m.role === 'assistant')
-      && typeof m.content === 'string').slice(-30); } catch {}
-  const saveChat = () => { try { localStorage.setItem('bubus.chat', JSON.stringify(chat.messages.slice(-30))); } catch {} };
+  const historySelect = $('chat-history');
+  const newThread = () => ({id: crypto.randomUUID(), messages: []});
+  let threads = [], active;
+  try {
+    const stored = JSON.parse(localStorage.getItem('bubus.threads') || 'null');
+    threads = (stored?.threads || []).filter(t => t.id && Array.isArray(t.messages));
+    active = threads.find(t => t.id === stored?.active);
+    if (!threads.length) {
+      active = newThread();
+      const legacy = JSON.parse(localStorage.getItem('bubus.chat') || '[]');
+      if (Array.isArray(legacy)) active.messages = legacy;
+      threads.push(active);
+    }
+  } catch {}
+  if (!threads.length) threads.push(newThread());
+  active ||= threads[0];
+  chat.messages = active.messages;
+  function saveChat() {
+    try { localStorage.setItem('bubus.threads', JSON.stringify({active: active.id, threads})); }
+    catch { $('chat-status').textContent = 'Stockage du navigateur indisponible. Cette discussion reste ouverte en mémoire.'; }
+    historySelect.replaceChildren(...threads.map(t => new Option(
+      t.messages.find(m => m.role === 'user')?.content.slice(0, 65) || 'Nouvelle discussion', t.id)));
+    historySelect.value = active.id;
+  }
+  saveChat();
+  historySelect.onchange = () => {
+    active = threads.find(t => t.id === historySelect.value);
+    chat.messages = active.messages;
+    saveChat(); renderChat(false);
+  };
   function renderChat(pending) {
     const log = $('chat-log');
     if (!chat.messages.length && !pending) { log.querySelector('.chat-empty').hidden = false;
@@ -142,7 +168,7 @@
   async function sendChat(text) {
     const content = text.trim();
     if (!content || chat.busy) return;
-    chat.busy = true; $('chat-send').disabled = true;
+    chat.busy = true; historySelect.disabled = $('chat-clear').disabled = true; $('chat-send').disabled = true;
     chat.messages.push({role: 'user', content}); saveChat(); renderChat(true);
     $('chat-input').value = ''; resizeChatInput();
     try {
@@ -155,7 +181,7 @@
       chat.messages.pop(); saveChat(); $('chat-input').value = content; resizeChatInput();
       toast(error.message); $('chat-status').textContent = error.message;
     } finally {
-      chat.busy = false; $('chat-send').disabled = !chat.ready; renderChat(false);
+      chat.busy = false; historySelect.disabled = $('chat-clear').disabled = false; $('chat-send').disabled = !chat.ready; renderChat(false);
     }
   }
   function resizeChatInput() {
@@ -170,7 +196,7 @@
     }
   });
   document.querySelectorAll('.chat-suggestion').forEach(button => button.addEventListener('click', () => sendChat(button.textContent)));
-  $('chat-clear').addEventListener('click', () => { chat.messages = []; saveChat(); renderChat(false); });
+  $('chat-clear').addEventListener('click', () => { if (!active.messages.length) return; active = newThread(); threads.unshift(active); chat.messages = active.messages; saveChat(); renderChat(false); });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   }
@@ -250,6 +276,25 @@
     $('toast').textContent = message; $('toast').hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(() => {$('toast').hidden = true;}, 5000);
   }
+  async function refreshRevolut() {
+    const button = $('rev-refresh');
+    if (button.disabled) return;
+    button.disabled = true;
+    const status = $('rev-status');
+    status.textContent = 'Lecture des soldes…';
+    $('rev-balances').replaceChildren();
+    try {
+      const result = await api('/api/desk/revolutx');
+      status.textContent = result.connected
+        ? 'Connecté · ' + new Date(result.observed).toLocaleString('fr-FR') : result.reason;
+      if (result.connected) {
+        const rows = result.balances.map(r => node('li', r.currency + ' · total ' + r.total + ' · disponible ' + r.available));
+        $('rev-balances').replaceChildren(...(rows.length ? rows : [node('li', 'Aucun solde sur ce compte.')]));
+      }
+    } catch { status.textContent = 'Lecture indisponible. Réessaie dans un instant.'; }
+    finally { button.disabled = false; }
+  }
+  $('rev-refresh').onclick = refreshRevolut;
   function view(name) {
     if (!labels[name]) name = 'markets';
     if (name === 'chat' || name === 'markets') {
@@ -265,6 +310,7 @@
     if (name === 'autopilot') { loadRiskLimits(); loadRiskReadiness(); loadOrderChainAudit(); }
     if (name === 'markets') requestAnimationFrame(drawChart);
     if (name === 'chat') loadChatState();
+    if (name === 'portfolio') refreshRevolut();
   }
   document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => view(button.dataset.view)));
   $('connection-shortcut').addEventListener('click', () => view('settings'));

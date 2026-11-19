@@ -39,7 +39,7 @@ Règles :
   « mets X € ». Tu peux expliquer les faits, les risques, la volatilité, les scénarios possibles, et
   rappeler des principes généraux (diversifier, acheter progressivement, ne pas investir ce qu'on ne
   peut pas perdre). La décision reste à l'utilisateur.
-- Tu n'as aucun accès au portefeuille, aux clés ni aux ordres, et tu ne peux rien exécuter. Si on te
+- Tu peux lire les soldes Revolut X présents dans le relevé. Tu n’as accès ni aux clés ni aux ordres, et tu ne peux rien exécuter. Si on te
   demande de passer un ordre, explique que BUBUS ne le fait pas et que l'utilisateur doit agir lui-même
   dans son application d'échange.
 - Les performances passées et les tendances ne prédisent pas l'avenir : présente-les comme des
@@ -157,7 +157,16 @@ def market_snapshot(server: Any, *, global_limit: int = 30) -> str:
     """Relevé compact des marchés publics déjà chargés par le serveur."""
     lines = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines.append(f"Données BUBUS — relevé du {now}. Aucune donnée de portefeuille n'est fournie.")
+    from bubus.revolutx import snapshot
+    portfolio = snapshot()
+    lines.append(f"Données BUBUS — relevé du {now}.")
+    if portfolio["connected"]:
+        lines.append("Revolut X connecté en lecture. Soldes (actif, total, disponible) :")
+        lines.extend(f"{r['currency']} : {r['total']}, {r['available']}" for r in portfolio["balances"])
+        if not portfolio["balances"]:
+            lines.append("Le compte connecté ne contient aucun solde.")
+    else:
+        lines.append("Aucune donnée de portefeuille disponible. Revolut X : " + portfolio["reason"])
     try:
         items = server.watch_risk.describe_all(server.desk_store.my_list())
         if items:

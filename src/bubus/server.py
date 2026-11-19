@@ -350,6 +350,9 @@ class DeskHandler(MarketDashboardHandler):
                 return self._send_json(200, scan)
             if parts.path == "/api/desk/ai-connections":
                 return self._send_json(200, self.server.ai_connections.state())
+            if parts.path == "/api/desk/revolutx":
+                from bubus.revolutx import snapshot
+                return self._send_json(200, snapshot())
             if parts.path == "/api/desk/chat":
                 return self._send_json(200, self.server.chat_service.state())
             if parts.path in {"/api/desk/my-list", "/api/desk/my-list/search"}:
