@@ -48,16 +48,11 @@ Dans **Discussion**, appuie sur **Continuer avec ChatGPT**, autorise BUBUS sur l
 fournisseur (OpenRouter, console Anthropic ou OpenAI). Le plafond de BUBUS compte les
 messages, pas les euros.
 
-**Brancher OpenRouter, pas à pas** :
+### Ajouter tes fournisseurs depuis l’accueil
 
-1. Sur openrouter.ai, connecte-toi, ajoute un peu de crédit, puis menu *Keys* → *Create Key*.
-   Mets une limite de crédit sur la clé.
-2. Dans Railway, service BUBUS → onglet **Variables** → *New Variable*.
-3. Nom : `OPENROUTER_API_KEY`, valeur : ta clé. Valide. Railway redémarre BUBUS tout seul.
-4. Ouvre la Discussion : la ligne du haut doit dire « OpenRouter · anthropic/claude-sonnet-4.6 ».
+Dans **Mes connexions IA**, appuie sur le nom du fournisseur, colle ta clé et enregistre. Le champ **Modèle** permet de choisir le modèle de discussion. **Importer mes clés** accepte un fichier texte contenant le nom de chaque fournisseur et sa clé sur la ligne suivante. BUBUS affiche les noms reconnus avant l’enregistrement. Choisis ensuite le fournisseur dans **Fournisseur utilisé dans Discussion**.
 
-Sur le PC, pas besoin de Railway : la case « Ta clé OpenRouter » de l'onglet Discussion
-enregistre la clé dans le coffre Windows.
+OpenRouter, Z.ai, OpenAI, Claude, DeepSeek, Kimi et Groq répondent dans Discussion. ElevenLabs affiche les voix disponibles et Cursor vérifie l’accès au compte. **Ouvrir ZCode** ouvre le site officiel. Sur le PC, Windows chiffre les clés. Sur Railway, la base chiffrée utilise le dossier de données de BUBUS. Ajoute un volume et conserve un secret de session stable pour garder les clés entre deux déploiements.
 
 **Garder « Ma liste »** : sans disque, Railway efface les fichiers à chaque mise
 à jour, donc ta liste de cryptos et d'actions repart à zéro. Pour la garder,

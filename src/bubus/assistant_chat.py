@@ -17,9 +17,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from bubus.ai_connections import PROVIDERS
+
 DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
 DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6"
-PROVIDER_LABELS = {"claude": "Claude (Anthropic)", "openai": "OpenAI", "openrouter": "OpenRouter"}
+PROVIDER_LABELS = {name: spec.label for name, spec in PROVIDERS.items() if spec.model}
+PROVIDER_LABELS["claude"] = "Claude (Anthropic)"
 MAX_HISTORY_MESSAGES = 12
 MAX_MESSAGE_CHARS = 4000
 MAX_REQUEST_BYTES = 64 * 1024
@@ -62,6 +65,7 @@ class ChatConfig:
     model: str | None
     api_key: str | None
     daily_limit: int
+    selected_in_app: bool = False
 
     @property
     def ready(self) -> bool:
@@ -75,7 +79,7 @@ class ChatConfig:
         elif self.provider == "openai" and not self.model:
             reason = "Choisis le modèle OpenAI avec la variable BUBUS_AI_MODEL."
         else:
-            reason = "Ajoute une clé OpenRouter, Claude ou OpenAI dans les réglages du serveur."
+            reason = "Ouvre Mes connexions IA pour ajouter ta clé OpenRouter ou celle d’un autre fournisseur."
         return {"ready": self.ready, "provider": PROVIDER_LABELS.get(self.provider or ""),
                 "model": self.model if self.ready else None, "daily_limit": self.daily_limit,
                 "reason": reason, "orders_enabled": False}
@@ -87,6 +91,8 @@ def load_config(environ: dict[str, str] | None = None) -> ChatConfig:
     keys = {"claude": env.get("ANTHROPIC_API_KEY", "").strip(),
             "openai": env.get("OPENAI_API_KEY", "").strip(),
             "openrouter": env.get("OPENROUTER_API_KEY", "").strip()}
+    keys.update({name: env.get(spec.variable, "").strip() for name, spec in PROVIDERS.items()
+                 if spec.model and name not in keys})
     if choice not in keys:
         choice = next((provider for provider, key in keys.items() if key), "")
     try:
@@ -95,7 +101,7 @@ def load_config(environ: dict[str, str] | None = None) -> ChatConfig:
         limit = DEFAULT_DAILY_LIMIT
     limit = max(0, min(limit, 1000))
     model = env.get("BUBUS_AI_MODEL", "").strip() or None
-    defaults = {"claude": DEFAULT_CLAUDE_MODEL, "openrouter": DEFAULT_OPENROUTER_MODEL}
+    defaults = {name: spec.model for name, spec in PROVIDERS.items() if name != "openai"}
     return ChatConfig(choice or None, (model or defaults.get(choice)) if choice else None,
                       keys.get(choice) or None, limit)
 
@@ -194,10 +200,11 @@ class ChatService:
                  claude_call: Callable[..., str] | None = None,
                  openai_call: Callable[..., str] | None = None,
                  quota: DailyQuota | None = None, chatgpt: Any | None = None,
-                 openrouter_keys: Any | None = None):
+                 openrouter_keys: Any | None = None, connections=None):
         self._config_loader = config_loader
         self._chatgpt = chatgpt
         self._openrouter_keys = openrouter_keys
+        self._connections = connections
         self._claude_call = claude_call or _call_claude
         self._openai_call = openai_call or _call_chat_completions
         self._quota = quota or DailyQuota()
@@ -205,6 +212,10 @@ class ChatService:
     def _config(self) -> ChatConfig:
         """Variables du serveur d'abord ; sinon la clé OpenRouter enregistrée sur ce PC."""
         config = self._config_loader()
+        selected = self._connections.selected() if self._connections else None
+        if selected:
+            name, key, model = selected
+            return ChatConfig(name, model, key, config.daily_limit, selected_in_app=True)
         if config.ready or self._openrouter_keys is None:
             return config
         saved = self._openrouter_keys.credentials()
@@ -215,7 +226,7 @@ class ChatService:
     def _use_chatgpt(self, config: ChatConfig) -> bool:
         """Abonnement ChatGPT connecté sur ce PC : prioritaire sauf choix explicite."""
         explicit = os.environ.get("BUBUS_AI_PROVIDER", "").strip().casefold() in PROVIDER_LABELS
-        return self._chatgpt is not None and not (explicit and config.ready) and self._chatgpt.ready
+        return self._chatgpt is not None and not ((explicit or config.selected_in_app) and config.ready) and self._chatgpt.ready
 
     def state(self) -> dict[str, Any]:
         config = self._config()
@@ -284,13 +295,11 @@ def _call_claude(*, config: ChatConfig, system: str, messages: list[dict[str, st
 
 
 def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
-    endpoints = {"openai": "https://api.openai.com/v1/chat/completions",
-                 "openrouter": "https://openrouter.ai/api/v1/chat/completions"}
     name = PROVIDER_LABELS[config.provider]
     api_messages = [{"role": "system", "content": system}] + [dict(m) for m in messages[:-1]]
     api_messages.append({"role": "user", "content": snapshot + "\n\n" + messages[-1]["content"]})
     body = json.dumps({"model": config.model, "messages": api_messages}).encode("utf-8")
-    request = urllib.request.Request(endpoints[config.provider], data=body, method="POST",
+    request = urllib.request.Request(PROVIDERS[config.provider].endpoint, data=body, method="POST",
                                      headers={"Content-Type": "application/json", "X-Title": "BUBUS"})
     request.add_unredirected_header("Authorization", f"Bearer {config.api_key}")
     try:
@@ -299,7 +308,7 @@ def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[di
     except urllib.error.HTTPError as exc:
         exc.close()
         if exc.code == 401:
-            raise ChatUnavailable(f"La clé {name} est refusée. Vérifie {config.provider.upper()}_API_KEY.") from None
+            raise ChatUnavailable(f"La clé {name} est refusée. Vérifie {PROVIDERS[config.provider].variable}.") from None
         if exc.code in {400, 404} and config.provider == "openrouter":
             raise ChatUnavailable(f"OpenRouter refuse le modèle « {config.model} ». Vérifie son nom.", 502) from None
         if exc.code == 402 and config.provider == "openrouter":

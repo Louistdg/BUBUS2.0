@@ -30,6 +30,8 @@ from bubus.offline_trade_transaction import OfflineTradeTransaction, OfflineTrad
 from bubus.store import DeskStore
 from bubus.assistant_chat import ChatRequestError, ChatService, ChatUnavailable, market_snapshot
 from bubus.assistant_chat import parse_conversation as parse_conversation_bytes
+from bubus.ai_connections import AIConnections
+from bubus.chatgpt_signin import DpapiProtector
 from bubus.ai_keys import AIKeyError, OpenRouterKeyStore
 from bubus.chatgpt_signin import CALLBACK_PATH as CHATGPT_CALLBACK_PATH, ChatGPTSignIn, ChatGPTSignInError
 import html as html_lib
@@ -96,6 +98,7 @@ class DeskHandler(MarketDashboardHandler):
         files = {"/": ("index.html", "text/html; charset=utf-8"),
                  "/assets/desk.css": ("desk.css", "text/css; charset=utf-8"),
                  "/assets/desk.js": ("desk.js", "text/javascript; charset=utf-8"),
+                 "/assets/ai-connections.js": ("ai-connections.js", "text/javascript; charset=utf-8"),
                  "/assets/icon.svg": ("icon.svg", "image/svg+xml"),
                  "/assets/icon-192.png": ("icon-192.png", "image/png"),
                  "/assets/icon-512.png": ("icon-512.png", "image/png"),
@@ -345,6 +348,8 @@ class DeskHandler(MarketDashboardHandler):
             if parts.path == "/api/desk/live-signals":
                 scan = self.server.live_signal_scanner.state(result_limit=2000)
                 return self._send_json(200, scan)
+            if parts.path == "/api/desk/ai-connections":
+                return self._send_json(200, self.server.ai_connections.state())
             if parts.path == "/api/desk/chat":
                 return self._send_json(200, self.server.chat_service.state())
             if parts.path in {"/api/desk/my-list", "/api/desk/my-list/search"}:
@@ -415,6 +420,27 @@ class DeskHandler(MarketDashboardHandler):
         except ChatUnavailable as exc:
             return self._reject_post(exc.status, str(exc))
         return self._send_json(200, result)
+
+    def _handle_connections_post(self):
+        if self.headers.get_content_type() != "application/json":
+            return self._reject_post(415, "JSON requis.")
+        size = self.headers.get("Content-Length", "")
+        if not size.isdecimal() or len(size) > 5 or not 1 <= int(size) <= 16384:
+            return self._reject_post(413, "Demande trop grande.")
+        try:
+            payload = json.loads(self.rfile.read(int(size)))
+            store = self.server.ai_connections
+            if isinstance(payload, dict) and set(payload) == {"action", "provider"} and payload["action"] == "inspect":
+                result = store.inspect_account(payload["provider"])
+            else:
+                result = store.update(payload)
+            return self._send_json(200, result)
+        except AIKeyError as exc:
+            return self._reject_post(400, str(exc))
+        except (ValueError, TypeError):
+            return self._reject_post(400, "Données de connexion invalides.")
+        except (OSError, sqlite3.Error, ChatGPTSignInError):
+            return self._reject_post(503, "Le coffre de BUBUS est indisponible.")
 
     def _handle_openrouter_post(self, forget: bool) -> None:
         """Enregistre ou oublie la clé OpenRouter du PC. L'appelant a déjà vérifié l'origine locale."""
@@ -493,6 +519,10 @@ class DeskHandler(MarketDashboardHandler):
             self.rfile.read(int(raw_length))
 
     def do_POST(self):
+        if urlsplit(self.path).path == "/api/desk/ai-connections":
+            if not self._local_host() or not self._same_origin():
+                return self._reject_post(403, "Ouvre cette action depuis BUBUS.")
+            return self._handle_connections_post()
         if urlsplit(self.path).path == "/api/desk/chat":
             if not self._local_host() or not self._same_origin():
                 self._drain_body()
@@ -1152,7 +1182,7 @@ def record_spot_portfolio_valuation_candidate(server, base_currency: str, *, per
 
 def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
                 bind_host="127.0.0.1", handler_class=DeskHandler,
-                cryptocom_observer_credential_store=None, chat_service=None, chatgpt_signin=None,
+                cryptocom_observer_credential_store=None, chat_service=None, chatgpt_signin=None, ai_protector=None,
                 **kwargs):
     kwargs.setdefault("cryptocom_credential_store", WindowsCryptoComCredentialStore(
         "BUBUS2.0/Crypto.com Exchange/Read-only"))
@@ -1165,7 +1195,9 @@ def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
     # Version PC uniquement : clé OpenRouter saisie dans l'appli, chiffrée par Windows.
     server.openrouter_keys = (OpenRouterKeyStore(Path(data_dir or ROOT / "data"))
                               if handler_class is DeskHandler else None)
-    server.chat_service = chat_service or ChatService(chatgpt=server.chatgpt_signin,
+    server.ai_connections = AIConnections(Path(data_dir or ROOT / "data"), ai_protector or DpapiProtector(),
+                                          legacy=server.openrouter_keys)
+    server.chat_service = chat_service or ChatService(chatgpt=server.chatgpt_signin, connections=server.ai_connections,
                                                       openrouter_keys=server.openrouter_keys)
     server.desk_store = DeskStore(Path(data_dir or ROOT / "data") / "desk.sqlite3")
     server.cryptocom_observer_credential_store = cryptocom_observer_credential_store or WindowsCryptoComCredentialStore(

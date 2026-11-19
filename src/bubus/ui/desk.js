@@ -77,9 +77,9 @@
         ? `${info.provider} · ${info.model} · jusqu’à ${info.daily_limit} messages par jour.`
         : (info.reason || 'L’IA n’est pas encore branchée.');
       if (!info.ready && info.chatgpt?.available && !info.chatgpt.signed_in) {
-        $('chat-status').textContent = 'Pour commencer, branche ton abonnement ChatGPT ou colle ta clé OpenRouter ci-dessous.';
+        $('chat-status').textContent = 'Choisis un fournisseur dans Mes connexions IA ou connecte ton compte ChatGPT.';
       }
-      renderChatGPT(info.chatgpt); renderOpenRouter(info);
+      renderChatGPT(info.chatgpt);
     } catch (error) { $('chat-status').textContent = error.message; }
     $('chat-send').disabled = !chat.ready;
   }
@@ -93,7 +93,6 @@
       button.type = 'button';
       button.disabled = true;
       box.append(button, node('p', 'La connexion de ton compte sera disponible dès que BUBUS sera activé auprès d’OpenAI.', 'microcopy'));
-      if (!chat.ready) box.append(node('p', 'En attendant, pour que l’IA réponde ici : dans Railway, onglet Variables, ajoute OPENROUTER_API_KEY avec ta clé OpenRouter (elle commence par sk-or-). L’appli redémarre toute seule.', 'microcopy'));
       return;
     }
     if (!info || !info.available) { box.hidden = true; return; }
@@ -119,42 +118,10 @@
     });
     box.append(line, manage, out);
   }
-  function renderOpenRouter(info) {
-    const box = $('openrouter-box'); box.replaceChildren();
-    const keys = info.openrouter;
-    if (document.body.dataset.mode === 'cloud' || !keys || !keys.available) { box.hidden = true; return; }
-    box.hidden = false;
-    if (keys.saved) {
-      const forget = node('button', 'Oublier la clé', 'text-link'); forget.type = 'button';
-      forget.addEventListener('click', async () => {
-        try { await api('/api/desk/openrouter/forget', {forget: true}); toast('Clé OpenRouter oubliée.'); chat.stateLoaded = false; loadChatState(); }
-        catch (error) { toast(error.message); }
-      });
-      box.append(node('p', `Clé OpenRouter enregistrée sur ce PC · modèle ${keys.model}`, 'chatgpt-line'), forget,
-        node('p', info.provider === 'OpenRouter' ? 'C’est elle qui répond dans la discussion.' : 'Elle sert si aucune autre IA n’est branchée.', 'microcopy'));
-      return;
-    }
-    const form = node('form', undefined, 'openrouter-form'); form.autocomplete = 'off';
-    const keyLabel = node('label', 'Ta clé OpenRouter');
-    const key = node('input'); key.type = 'password'; key.required = true; key.maxLength = 220; key.placeholder = 'sk-or-…';
-    key.autocomplete = 'off'; key.spellcheck = false; keyLabel.append(key);
-    const modelLabel = node('label', 'Modèle (facultatif)');
-    const model = node('input'); model.type = 'text'; model.maxLength = 160; model.placeholder = `${keys.default_model} (choix automatique)`;
-    model.autocomplete = 'off'; model.spellcheck = false; modelLabel.append(model);
-    const save = node('button', 'Enregistrer la clé', 'button button-green'); save.type = 'submit';
-    form.append(keyLabel, modelLabel, save);
-    form.addEventListener('submit', async event => {
-      event.preventDefault(); save.disabled = true;
-      try {
-        await api('/api/desk/openrouter/key', {key: key.value, model: model.value});
-        key.value = ''; toast('Clé OpenRouter enregistrée dans le coffre Windows.');
-        chat.stateLoaded = false; loadChatState();
-      } catch (error) { toast(error.message); }
-      finally { save.disabled = false; }
-    });
-    box.append(node('p', 'Ou utilise OpenRouter', 'chatgpt-line'), form,
-      node('p', 'Crée une clé sur openrouter.ai (menu Keys), règle une limite de crédit, puis colle-la ici. Elle est chiffrée par Windows et ne quitte pas ce PC.', 'microcopy'));
-  }
+  document.addEventListener('bubus-ai-changed', () => {
+    chat.stateLoaded = false;
+    if (location.hash === '#chat') loadChatState();
+  });
   async function connectChatGPT() {
     try {
       const {authorize_url: url} = await api('/api/desk/chatgpt/connect', {});
@@ -285,6 +252,10 @@
   }
   function view(name) {
     if (!labels[name]) name = 'markets';
+    if (name === 'chat' || name === 'markets') {
+      const slot = $(name === 'chat' ? 'ai-chat-slot' : 'ai-home-slot');
+      slot.append($('ai-connections'));
+    }
     document.querySelectorAll('.view').forEach(section => {section.hidden = section.id !== `view-${name}`;});
     document.querySelectorAll('.nav-item').forEach(button => button.classList.toggle('active', button.dataset.view === name));
     $('breadcrumb').textContent = labels[name];

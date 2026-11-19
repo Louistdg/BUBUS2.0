@@ -24,7 +24,7 @@ from bubus.server import ASSETS, DeskHandler, make_server
 
 
 _AUTHENTICATED_GET_PATHS = frozenset({
-    "/", "/assets/desk.css", "/assets/desk.js",
+    "/", "/assets/desk.css", "/assets/desk.js", "/assets/ai-connections.js", "/api/desk/ai-connections",
     "/api/desk/state", "/api/market-data/crypto-overview",
     "/api/market-data/coingecko-overview", "/api/market-data/state",
     "/api/desk/candles", "/api/desk/research", "/api/desk/chat",
@@ -82,10 +82,10 @@ CHATGPT_CALLBACK = "/auth/chatgpt/callback"
 class _CloudTokenProtector:
     available = True
 
-    def __init__(self):
+    def __init__(self, purpose="chatgpt/web/v1"):
         from cryptography.fernet import Fernet
         username, _ = _credentials()
-        context = ("bubus/chatgpt/web/v1/" + username).encode()
+        context = (f"bubus/{purpose}/" + username).encode()
         key = hmac.digest(_session_secret(), context, "sha256")
         self._cipher = Fernet(base64.urlsafe_b64encode(key))
 
@@ -399,6 +399,10 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
         if not self._authorized():
             self._drain_body()
             return self._auth_required()
+        if path == "/api/desk/ai-connections":
+            if not self._same_site_write() or not session_token_valid(self._cookie(SESSION_COOKIE)):
+                return self._reject_post(403, "Ouvre cette action depuis ta session BUBUS.")
+            return self._handle_connections_post()
         if path in {"/api/desk/chatgpt/connect", "/api/desk/chatgpt/finish", "/api/desk/chatgpt/disconnect"}:
             return self._chatgpt_action(path)
         if path == "/api/desk/chat":
@@ -448,7 +452,8 @@ def main() -> int:
     default_dir = str(Path(volume) / "bubus") if volume else "/tmp/bubus-preview"
     data_dir = Path(os.environ.get("BUBUS_PREVIEW_DATA_DIR", default_dir))
     server = make_server(port, data_dir=data_dir, bind_host="0.0.0.0",
-                         handler_class=AuthenticatedCloudPreviewHandler, chatgpt_signin=hosted_chatgpt(data_dir))
+                         handler_class=AuthenticatedCloudPreviewHandler, chatgpt_signin=hosted_chatgpt(data_dir),
+                         ai_protector=_CloudTokenProtector("ai-keys/v1"))
     print("BUBUS2.0 en ligne : marchés publics et discussion IA, en lecture seule.", flush=True)
     try:
         server.serve_forever(poll_interval=0.25)

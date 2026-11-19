@@ -282,3 +282,16 @@ body[data-mode="cloud"] .live-signal-panel{display:none}
 .revolutx-card>div{flex:1}
 .revolutx-mark{flex-shrink:0;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--sidebar);color:#fff;font-weight:700;font-size:20px}
 @media (max-width:600px){.revolutx-card{flex-wrap:wrap;padding:20px}}
+
+.ai-connections {padding:20px;margin-bottom:16px}
+.ai-connections h2 {margin:0 0 14px}
+.ai-providers {display:grid;grid-template-columns:repeat(auto-fit,minmax(136px,1fr));gap:8px;margin-bottom:16px}
+.ai-providers .button {display:flex;align-items:flex-start;flex-direction:column;gap:4px;text-align:left;white-space:normal;height:auto}
+.ai-providers small {font-weight:400;font-size:.75rem}
+.ai-connections label {display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}
+.ai-connections input,.ai-connections select {max-width:100%;min-width:0;font:inherit;padding:6px}
+.ai-connections .ai-actions {display:flex;align-items:center;flex-wrap:wrap;gap:12px}
+.ai-connections .ai-file {display:grid;gap:4px}
+.ai-connections a {color:inherit}
+.ai-connections p:empty {display:none}
+.ai-connections [hidden] {display:none!important}
