@@ -1221,6 +1221,8 @@ def make_server(port=8790, *, data_dir=None, cryptocom_instrument_catalog=None,
         Path(data_dir or ROOT / "data") / "live-order-journal.sqlite3")
     server.market_evidence_store = CryptoComMarketEvidenceStore(str(Path(data_dir or ROOT)))
     server.candles = CandleSource()
+    from bubus.market_references import MarketReferences
+    server.market_references = MarketReferences()
     server.watch_risk = WatchRisk()
     server.cryptocom_market_stream.configure_candlesticks(
         "5m", server.candles.update_live_candle)

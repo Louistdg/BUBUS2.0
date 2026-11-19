@@ -290,6 +290,18 @@
       if (result.connected) {
         const rows = result.balances.map(r => node('li', r.currency + ' · total ' + r.total + ' · disponible ' + r.available));
         $('rev-balances').replaceChildren(...(rows.length ? rows : [node('li', 'Aucun solde sur ce compte.')]));
+        for (const [key, title] of [["active", "Ordres ouverts"], ["historical", "Historique des ordres"]]) {
+          const section = result[key];
+          if (!section) continue;
+          const detail = document.createElement("details");
+          detail.append(node("summary", title + " · " + section.rows.length + (section.partial ? " (partiel)" : "")));
+          if (section.error) detail.append(node("p", section.error));
+          else if (!section.rows.length) detail.append(node("p", "Aucun ordre renvoyé par Revolut X."));
+          for (const row of section.rows) detail.append(node("p", Object.values(row).join(" · ")));
+          const item = document.createElement("li");
+          item.append(detail);
+          $('rev-balances').append(item);
+        }
       }
     } catch { status.textContent = 'Lecture indisponible. Réessaie dans un instant.'; }
     finally { button.disabled = false; }

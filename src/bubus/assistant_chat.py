@@ -153,7 +153,7 @@ def parse_conversation(raw: bytes) -> list[dict[str, str]]:
     return cleaned
 
 
-def market_snapshot(server: Any, *, global_limit: int = 30) -> str:
+def market_snapshot(server: Any, *, global_limit: int = 250) -> str:
     """Relevé compact des marchés publics déjà chargés par le serveur."""
     lines = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -163,6 +163,14 @@ def market_snapshot(server: Any, *, global_limit: int = 30) -> str:
     if portfolio["connected"]:
         lines.append("Revolut X connecté en lecture. Soldes (actif, total, disponible) :")
         lines.extend(f"{r['currency']} : {r['total']}, {r['available']}" for r in portfolio["balances"])
+        for key, label in (("active", "Ordres ouverts"), ("historical", "Historique des ordres")):
+            section = portfolio.get(key)
+            if section is not None:
+                lines.append(f"{label} Revolut X : {len(section['rows'])} reçus" +
+                             (" (lecture partielle)" if section["partial"] else ""))
+                lines.extend(str(row) for row in section["rows"][:100])
+                if len(section["rows"]) > 100:
+                    lines.append("Détail limité aux 100 premiers ordres reçus.")
         if not portfolio["balances"]:
             lines.append("Le compte connecté ne contient aucun solde.")
     else:
@@ -191,9 +199,13 @@ def market_snapshot(server: Any, *, global_limit: int = 30) -> str:
         for m in rows[:global_limit]:
             lines.append(f"- #{m.get('market_cap_rank')} {m.get('name')} ({m.get('symbol')}) : "
                          f"{m.get('price_usd')} USD, 24 h {m.get('change_24h_pct', '?')} %, "
-                         f"capitalisation {m.get('market_cap_usd', '?')} USD")
+                         f"capitalisation {m.get('market_cap_usd', '?')} USD, " +
+                         ", ".join(f"{period} {value} %" for period, value in m.get("returns_pct", {}).items()))
     except Exception:  # noqa: BLE001
         lines.append("CoinGecko : données indisponibles pour le moment.")
+    if hasattr(server, "market_references"):
+        lines.append("Yahoo Finance · derniers cours disponibles et clôtures historiques, variations de prix hors dividendes.")
+        lines.extend(server.market_references.lines())
     return "\n".join(lines)
 
 

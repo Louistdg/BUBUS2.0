@@ -12,7 +12,7 @@ from typing import Callable, Protocol
 from urllib.request import Request, urlopen
 
 
-_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h"
+_MARKETS_URL = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h,7d,30d,1y"
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _CACHE_SECONDS = 60
 _MAX_MARKETS = 250
@@ -105,6 +105,13 @@ class CoinGeckoMarketOverview:
                     "market_cap_rank": rank,
                     "volume_24h_usd": str(volume),
                     "change_24h_pct": None if change is None else str(change),
+                    "returns_pct": {
+                        period: str(row[field]) for period, field in (
+                            ("7j", "price_change_percentage_7d_in_currency"),
+                            ("30j", "price_change_percentage_30d_in_currency"),
+                            ("1an", "price_change_percentage_1y_in_currency"))
+                        if isinstance(row.get(field), (Decimal, int)) and not isinstance(row[field], bool)
+                    },
                     "provider_timestamp": provider_time.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
                     "source": "CoinGecko API /coins/markets",
                     "payload_sha256": hashlib.sha256(json.dumps(row, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest(),
