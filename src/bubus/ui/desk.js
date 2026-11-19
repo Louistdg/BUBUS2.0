@@ -76,7 +76,14 @@
   function renderChatGPT(info) {
     const box = $('chatgpt-box');
     box.replaceChildren();
-    if (!info || !info.available || document.body.dataset.mode === 'cloud') { box.hidden = true; return; }
+    if (document.body.dataset.mode === 'cloud') {
+      if (chat.ready) { box.hidden = true; return; }
+      box.hidden = false;
+      box.append(node('p', 'Le bouton « Continuer avec ChatGPT » existe seulement sur ton PC : OpenAI ne l’autorise pas encore pour un site en ligne.', 'chatgpt-line'),
+        node('p', 'Sur ton PC : lance bubus.cmd, ouvre l’onglet Discussion et clique sur le bouton. Pour que l’IA réponde aussi ici, il faut une clé Claude ou ChatGPT dans les réglages de Railway.', 'microcopy'));
+      return;
+    }
+    if (!info || !info.available) { box.hidden = true; return; }
     box.hidden = false;
     if (!info.signed_in || !info.plan_enabled) {
       const button = node('button', 'Continuer avec ChatGPT', 'button chatgpt-button');
