@@ -358,6 +358,9 @@ class DeskHandler(MarketDashboardHandler):
             if parts.path == "/api/desk/conversion-quotes":
                 from bubus.market_references import conversion_quotes
                 return self._send_json(200, conversion_quotes())
+            if parts.path == "/api/desk/patrimoine":
+                from bubus.valuation import valuation
+                return self._send_json(200, valuation())
             if parts.path == "/api/desk/revolutx":
                 from bubus.revolutx import snapshot
                 return self._send_json(200, snapshot())
