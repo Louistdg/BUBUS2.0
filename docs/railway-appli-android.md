@@ -26,9 +26,9 @@ ni dans un message.
 | `BUBUS_PREVIEW_PASSWORD` | oui | Ton mot de passe, **24 caractères minimum**. Le changer déconnecte tous les appareils. |
 | `ANTHROPIC_API_KEY` | pour Claude | Clé API Claude (console.anthropic.com), dédiée à BUBUS. |
 | `OPENAI_API_KEY` | pour OpenAI | Clé API OpenAI (platform.openai.com), dédiée à BUBUS. |
-| `OPENROUTER_API_KEY` | pour OpenRouter | Clé OpenRouter dédiée à BUBUS. Avec cette clé seule, Discussion utilise `openrouter/free`. |
+| `OPENROUTER_API_KEY` | pour OpenRouter | Clé OpenRouter dédiée à BUBUS. Avec cette clé seule, Discussion utilise le modèle payant `anthropic/claude-sonnet-4.6`. |
 | `BUBUS_AI_PROVIDER` | non | `claude`, `openai` ou `openrouter`. Si plusieurs clés sont présentes, cette variable permet de choisir le fournisseur. |
-| `BUBUS_AI_MODEL` | pour OpenAI | Le modèle à utiliser. Facultatif pour OpenRouter (par défaut `openrouter/free`) et Claude (par défaut `claude-opus-5-5`). |
+| `BUBUS_AI_MODEL` | pour OpenAI | Le modèle à utiliser. Facultatif pour OpenRouter (par défaut `anthropic/claude-sonnet-4.6`) et Claude (par défaut `claude-opus-5-5`). |
 | `BUBUS_AI_DAILY_MESSAGE_LIMIT` | non | Plafond de messages par jour, 60 par défaut. Il protège ta facture. |
 | `BUBUS_SESSION_SECRET` | non | Secret de signature des sessions (32 caractères minimum). Sans lui, il est dérivé du mot de passe. |
 

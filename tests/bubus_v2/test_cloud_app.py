@@ -355,13 +355,14 @@ class ChatServiceTests(unittest.TestCase):
     def test_openrouter_key_alone_sends_chat_to_openrouter(self):
         config = load_config({"OPENROUTER_API_KEY": "router-test"})
         service = ChatService(config_loader=lambda: config)
-        self.assertEqual(service.state()["model"], "openrouter/free")
+        self.assertEqual(service.state()["model"], "anthropic/claude-sonnet-4.6")
         response = io.BytesIO(json.dumps({"choices": [{"message": {"content": "Bonjour"}}]}).encode())
         with patch("urllib.request.urlopen", return_value=response) as send:
             result = service.reply([{"role": "user", "content": "Salut"}], "Relevé de test")
         request = send.call_args.args[0]
         self.assertEqual(request.full_url, "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(request.get_header("Authorization"), "Bearer router-test")
+        self.assertEqual(json.loads(request.data)["model"], "anthropic/claude-sonnet-4.6")
         self.assertIn("Relevé de test", json.loads(request.data)["messages"][-1]["content"])
         self.assertEqual((result["provider"], result["reply"]), ("OpenRouter", "Bonjour"))
         self.assertNotIn("router-test", json.dumps([service.state(), result]))

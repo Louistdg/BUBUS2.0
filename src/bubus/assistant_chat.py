@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 DEFAULT_CLAUDE_MODEL = "claude-opus-5-5"
-DEFAULT_OPENROUTER_MODEL = "openrouter/free"
+DEFAULT_OPENROUTER_MODEL = "anthropic/claude-sonnet-4.6"
 PROVIDER_LABELS = {"claude": "Claude (Anthropic)", "openai": "OpenAI", "openrouter": "OpenRouter"}
 MAX_HISTORY_MESSAGES = 12
 MAX_MESSAGE_CHARS = 4000
