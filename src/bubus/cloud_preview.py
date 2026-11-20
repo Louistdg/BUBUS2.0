@@ -33,7 +33,7 @@ _AUTHENTICATED_GET_PATHS = frozenset({
 })
 # Fichiers d'installation de l'appli : le navigateur les télécharge sans cookie.
 _PUBLIC_GET_PATHS = frozenset({
-    "/manifest.webmanifest", "/sw.js", "/assets/icon-192.png?v=chien",
+    "/manifest.webmanifest", "/sw.js", "/assets/icon.svg",
     "/assets/icon-192.png", "/assets/icon-512.png", "/assets/icon-maskable-512.png",
 })
 
