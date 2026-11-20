@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const element = (tag, text) => Object.assign(document.createElement(tag), {textContent:text});
-  let wallet, busy=false, hidden=localStorage.getItem('bibus.privacy')==='true', rules=[], pushKey=null, pushSubscription=null;
+  let wallet, busy=false, hidden=localStorage.getItem('bibus.privacy')==='true', rules=[], pushKey=null, pushSubscription=null, deviceCount=0;
   const number=n=>Number(n).toLocaleString('fr-FR',{maximumFractionDigits:10});
   const euro=n=>hidden?'•••• €':n==null?'Indisponible':Number(n).toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
   const time=t=>new Date(t).toLocaleString('fr-FR');
@@ -30,12 +30,14 @@
     if (!response.ok) throw new Error(result.error);
     rules = result.rules;
     pushKey = result.public_key;
+    deviceCount = result.device_count;
     showRules();
   }
   function pushOptions() {
     $('enable-push').disabled = !pushKey || !!pushSubscription;
-    $('test-push').disabled = !pushSubscription;
-    $('rule').querySelector('button').disabled = !pushSubscription;
+    $('test-push').disabled = !deviceCount;
+    $('rule').querySelector('button').disabled = !pushKey;
+    $('push-devices').textContent = deviceCount + ' appareil' + (deviceCount === 1 ? '' : 's') + ' inscrit' + (deviceCount === 1 ? '' : 's');
   }
   async function loadAlerts() {
     try {
@@ -43,7 +45,11 @@
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Ouvre BUBUS dans Chrome sur Android.');
       await navigator.serviceWorker.register('/sw.js');
       const registration = await navigator.serviceWorker.ready;
-      pushSubscription = await registration.pushManager.getSubscription();
+      const existing = await registration.pushManager.getSubscription();
+      if (existing && Notification.permission === 'granted') {
+        await alertApi({action:'register', subscription:existing});
+        pushSubscription = existing;
+      }
     } catch (error) { alertStatus(error.message); }
     pushOptions();
   }
@@ -54,7 +60,9 @@
       const padded = pushKey.replace(/-/g, '+').replace(/_/g, '/') + '=';
       const applicationServerKey = Uint8Array.from(atob(padded), value => value.charCodeAt(0));
       const registration = await navigator.serviceWorker.ready;
-      pushSubscription = await registration.pushManager.subscribe({userVisibleOnly:true, applicationServerKey});
+      const current = await registration.pushManager.subscribe({userVisibleOnly:true, applicationServerKey});
+      await alertApi({action:'register', subscription:current});
+      pushSubscription = current;
       let previous = [];
       try { previous = JSON.parse(localStorage.getItem('bibus.priceAlerts') || '[]'); } catch {}
       if (Array.isArray(previous)) {
@@ -62,7 +70,7 @@
           if (!item?.symbol || !item.currency || !item.limit) continue;
           try {
             await alertApi({action:'add', symbol:item.symbol, currency:item.currency,
-                            direction:item.direction, threshold:item.limit, subscription:pushSubscription});
+                            direction:item.direction, threshold:item.limit});
           } catch { continue; }
         }
       }
@@ -74,14 +82,14 @@
     const button = $('test-push');
     button.disabled = true;
     try {
-      await alertApi({action:'test', subscription:pushSubscription});
-      alertStatus('Ferme BUBUS. Trois notifications numérotées arriveront à partir de 30 secondes, puis environ toutes les 35 secondes.');
+      await alertApi({action:'test'});
+      alertStatus('Trois tests seront envoyés à tous les appareils inscrits. Tu peux fermer BUBUS.');
     } catch (error) { alertStatus(error.message); }
     finally { button.disabled = false; }
   };
   function showRules(){
     $('rules').replaceChildren(...rules.map(rule=>{
-      const status = {active:'En attente', sending:'Envoi lancé', uncertain:'Envoi non confirmé', sent:'Envoyée', failed:'Échec de notification'}[rule.state];
+      const status = {active:'En attente', sending:'Envoi lancé', uncertain:'Envoi non confirmé', sent:'Envoyée', partial:'Envoyée à certains appareils', failed:'Échec de notification'}[rule.state];
       const row = element('li', rule.symbol+' '+(rule.direction==='above'?'≥':'≤')+' '+number(rule.threshold)+' '+rule.currency+' · '+status);
       const remove = element('button','Supprimer');
       remove.onclick = async () => {
@@ -117,11 +125,11 @@
     event.preventDefault();
     const quote = wallet?.market.find(q => q.symbol === $('asset').value);
     const threshold = $('threshold').value;
-    if (!quote || !pushSubscription || !(Number(threshold) > 0)) return;
+    if (!quote || !pushKey || !(Number(threshold) > 0)) return;
     $('rule').querySelector('button').disabled = true;
     try {
       await alertApi({action:'add', symbol:quote.symbol, currency:quote.currency,
-                      direction:$('direction').value, threshold, subscription:pushSubscription});
+                      direction:$('direction').value, threshold});
       $('threshold').value = '';
       alertStatus('Seuil enregistré. Une notification sera envoyée au prochain franchissement.');
     } catch (error) { alertStatus(error.message); }

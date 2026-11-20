@@ -60,7 +60,22 @@ class PriceAlerts:
             )""")
             db.execute("CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT NOT NULL)")
             db.execute("BEGIN IMMEDIATE")
-            db.execute("UPDATE rules SET state='uncertain' WHERE state='sending'")
+            db.execute("""CREATE TABLE IF NOT EXISTS devices (
+                endpoint TEXT PRIMARY KEY, subscription TEXT NOT NULL
+            )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS deliveries (
+                rule_id TEXT NOT NULL, endpoint TEXT NOT NULL, message TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY (rule_id, endpoint)
+            )""")
+            db.execute("UPDATE deliveries SET state='uncertain' WHERE state='sending'")
+            for row in list(db.execute("SELECT DISTINCT subscription FROM rules WHERE subscription != ''")):
+                target = subscription(json.loads(row[0]))
+                db.execute("INSERT OR IGNORE INTO devices VALUES (?, ?)", (target["endpoint"], json.dumps(target)))
+            db.execute("UPDATE rules SET subscription='' WHERE subscription != ''")
+            db.execute("""DELETE FROM rules WHERE state='active' AND test_at IS NULL AND rowid NOT IN (
+                SELECT max(rowid) FROM rules WHERE state='active' AND test_at IS NULL
+                GROUP BY symbol, currency, direction, threshold
+            )""")
             row = db.execute("SELECT value FROM settings WHERE name='vapid'").fetchone()
             if row:
                 self.private_key = serialization.load_pem_private_key(row[0].encode(), password=None)
@@ -98,14 +113,22 @@ class PriceAlerts:
         with self._db() as db:
             rows = db.execute("""SELECT id, symbol, currency, direction, threshold, state
                               FROM rules WHERE test_at IS NULL ORDER BY rowid DESC""")
-            return {"rules": [dict(row) for row in rows], "public_key": self.public_key}
+            return {"rules": [dict(row) for row in rows], "public_key": self.public_key,
+                    "device_count": db.execute("SELECT count(*) FROM devices").fetchone()[0]}
+
+    def register(self, payload):
+        target = subscription(payload)
+        with self._db() as db:
+            db.execute("""INSERT INTO devices VALUES (?, ?) ON CONFLICT(endpoint)
+                          DO UPDATE SET subscription=excluded.subscription""",
+                       (target["endpoint"], json.dumps(target)))
 
     def remove(self, rule_id):
         with self._db() as db:
+            db.execute("DELETE FROM deliveries WHERE rule_id=?", (rule_id,))
             db.execute("DELETE FROM rules WHERE id=?", (rule_id,))
 
     def add(self, payload, *, test=False):
-        target = subscription(payload["subscription"])
         cutoff = int(self.clock()) - 3600
         if test:
             symbol, currency, direction, threshold = "TEST", "EUR", "above", Decimal(2)
@@ -124,14 +147,16 @@ class PriceAlerts:
         side = self._side(baseline, threshold, direction)
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
+            db.execute("DELETE FROM deliveries WHERE rule_id IN (SELECT id FROM rules WHERE test_at < ?)", (cutoff,))
             db.execute("DELETE FROM rules WHERE test_at < ?", (cutoff,))
             if not test and db.execute("""SELECT 1 FROM rules WHERE symbol=? AND currency=?
-                    AND direction=? AND threshold=? AND subscription=? AND state='active'""",
-                    (symbol, currency, direction, str(threshold), json.dumps(target))).fetchone():
+                    AND direction=? AND threshold=? AND state='active'""",
+                    (symbol, currency, direction, str(threshold))).fetchone():
                 return
             if test:
-                exists = db.execute("SELECT 1 FROM rules WHERE test_at IS NOT NULL AND subscription=? AND state='active'",
-                                    (json.dumps(target),)).fetchone()
+                exists = db.execute("SELECT 1 FROM rules WHERE test_at IS NOT NULL AND state='active'").fetchone()
+                if not db.execute("SELECT 1 FROM devices LIMIT 1").fetchone():
+                    raise ValueError("Active les notifications sur un appareil BUBUS.")
                 if exists:
                     return
             count = db.execute("SELECT count(*) FROM rules").fetchone()[0]
@@ -141,11 +166,11 @@ class PriceAlerts:
                 now = int(self.clock())
                 db.executemany("""INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
                                [(uuid4().hex, f"{index}/3", currency, direction, str(threshold),
-                                 json.dumps(target), side, stamp, now + delay)
+                                 "", side, stamp, now + delay)
                                 for index, delay in enumerate((30, 65, 100), start=1)])
                 return
             db.execute("""INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL)""",
-                       (uuid4().hex, symbol, currency, direction, str(threshold), json.dumps(target),
+                       (uuid4().hex, symbol, currency, direction, str(threshold), "",
                         side, stamp))
 
     @staticmethod
@@ -160,6 +185,7 @@ class PriceAlerts:
                 if self.clock() >= rule["test_at"]:
                     self._advance(rule, Decimal(3), rule["test_at"])
         real = [rule for rule in rules if rule["test_at"] is None]
+        self._deliver()
         if not real:
             return
         quotes = {(q["symbol"], q["currency"]): q for q in self.quote_source().get("market", [])}
@@ -167,31 +193,61 @@ class PriceAlerts:
             quote = quotes.get((rule["symbol"], rule["currency"]))
             if quote:
                 self._advance(rule, positive(quote["price"]), quote.get("stamp"))
+        self._deliver()
 
     def _advance(self, rule, price, stamp):
         if price is None or not isinstance(stamp, int) or stamp <= rule["last_stamp"]:
             return
         side = self._side(price, Decimal(rule["threshold"]), rule["direction"])
         crossed = not rule["last_side"] and side
-        # Claim atomically before delivery. Never retry ambiguous deliveries.
+        body = ("Un seuil fictif a été franchi."
+                if rule["test_at"] else f'{rule["symbol"]} · seuil de {rule["threshold"]} {rule["currency"]} franchi.')
+        message = {"title": f'BUBUS · Test {rule["symbol"]}' if rule["test_at"] else "BUBUS · Alerte de prix",
+                   "body": body, "tag": "bubus-price-" + rule["id"]}
+        # Record the crossing and queue its deliveries in the same transaction.
         with self._db() as db:
             changed = db.execute("""UPDATE rules SET last_side=?, last_stamp=?, state=?
                 WHERE id=? AND state='active' AND last_stamp=?""",
                 (side, stamp, "sending" if crossed else "active", rule["id"], rule["last_stamp"])).rowcount
-        if not (crossed and changed):
-            return
-        body = ("Un seuil fictif a été franchi. Ce test n’envoie qu’une notification."
-                if rule["test_at"] else f'{rule["symbol"]} · seuil de {rule["threshold"]} {rule["currency"]} franchi.')
-        message = {"title": f'BUBUS · Test {rule["symbol"]}' if rule["test_at"] else "BUBUS · Alerte de prix",
-                   "body": body, "tag": "bubus-price-" + rule["id"]}
-        state = "sent"
-        try:
-            self.sender(json.loads(rule["subscription"]), message)
-        except Exception:
-            state = "failed"
-            logger.warning("Une notification BUBUS n’a pas pu être envoyée.")
+            if crossed and changed:
+                queued = db.execute("""INSERT INTO deliveries (rule_id, endpoint, message)
+                    SELECT ?, endpoint, ? FROM devices""", (rule["id"], json.dumps(message))).rowcount
+                if not queued:
+                    db.execute("UPDATE rules SET state='failed' WHERE id=?", (rule["id"],))
+
+    def _deliver(self):
         with self._db() as db:
-            db.execute("UPDATE rules SET state=? WHERE id=?", (state, rule["id"]))
+            pending = list(db.execute("""SELECT deliveries.*, devices.subscription FROM deliveries
+                LEFT JOIN devices USING(endpoint) WHERE deliveries.state='pending'"""))
+        for delivery in pending:
+            identity = (delivery["rule_id"], delivery["endpoint"])
+            with self._db() as db:
+                claimed = db.execute("""UPDATE deliveries SET state='sending'
+                    WHERE rule_id=? AND endpoint=? AND state='pending'""", identity).rowcount
+            if not claimed:
+                continue
+            state = "failed"
+            try:
+                if delivery["subscription"]:
+                    self.sender(json.loads(delivery["subscription"]), json.loads(delivery["message"]))
+                    state = "sent"
+            except Exception as exc:
+                response = getattr(exc, "response", None)
+                if getattr(response, "status_code", None) in (404, 410):
+                    with self._db() as db:
+                        db.execute("DELETE FROM devices WHERE endpoint=?", (delivery["endpoint"],))
+                logger.warning("Une notification BUBUS n’a pas pu être envoyée.")
+            with self._db() as db:
+                db.execute("UPDATE deliveries SET state=? WHERE rule_id=? AND endpoint=?", (state, *identity))
+        with self._db() as db:
+            db.execute("""UPDATE rules SET state=CASE
+                  WHEN EXISTS (SELECT 1 FROM deliveries WHERE rule_id=rules.id AND state='uncertain') THEN 'uncertain'
+                  WHEN EXISTS (SELECT 1 FROM deliveries WHERE rule_id=rules.id AND state='sent')
+                    AND EXISTS (SELECT 1 FROM deliveries WHERE rule_id=rules.id AND state='failed') THEN 'partial'
+                  WHEN EXISTS (SELECT 1 FROM deliveries WHERE rule_id=rules.id AND state='sent') THEN 'sent'
+                  ELSE 'failed' END
+                WHERE state='sending' AND NOT EXISTS (SELECT 1 FROM deliveries WHERE rule_id=rules.id
+                                                      AND state IN ('pending', 'sending'))""")
 
     def _push(self, target, message):
         from pywebpush import webpush

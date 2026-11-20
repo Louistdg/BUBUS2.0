@@ -412,6 +412,8 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
             action = data["action"]
             if action in ("add", "test"):
                 alerts.add(data, test=action == "test")
+            elif action == "register":
+                alerts.register(data["subscription"])
             elif action == "remove" and isinstance(data["id"], str) and len(data["id"]) == 32:
                 alerts.remove(data["id"])
             else:
