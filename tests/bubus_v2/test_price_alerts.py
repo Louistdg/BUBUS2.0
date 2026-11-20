@@ -107,3 +107,8 @@ class PriceAlertTests(unittest.TestCase):
         self.price, self.stamp = "15", 101
         reopened.poll()
         self.assertEqual(len(self.messages), 1)
+
+    def test_current_chrome_web_push_endpoint_is_accepted(self):
+        current = {**SUBSCRIPTION, "endpoint": "https://fcm.googleapis.com/wp/current-device-test"}
+        self.alerts.register(current)
+        self.assertEqual(self.alerts.list()["device_count"], 2)

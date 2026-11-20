@@ -35,7 +35,7 @@ def subscription(data):
     keys = data["keys"]
     url = urlsplit(endpoint)
     if (url.scheme != "https" or url.netloc != "fcm.googleapis.com"
-            or not re.fullmatch(r"/fcm/send/[A-Za-z0-9_:-]{10,2048}", url.path)
+            or not re.fullmatch(r"/(?:fcm/send|wp)/[A-Za-z0-9_:-]{10,2048}", url.path)
             or url.query or url.fragment):
         raise ValueError("Abonnement Chrome Android invalide.")
     for key, size in (("p256dh", 87), ("auth", 22)):
@@ -231,12 +231,14 @@ class PriceAlerts:
                 if delivery["subscription"]:
                     self.sender(json.loads(delivery["subscription"]), json.loads(delivery["message"]))
                     state = "sent"
+                    print("Notification BUBUS acceptée par le service Push.", flush=True)
             except Exception as exc:
                 response = getattr(exc, "response", None)
                 if getattr(response, "status_code", None) in (404, 410):
                     with self._db() as db:
                         db.execute("DELETE FROM devices WHERE endpoint=?", (delivery["endpoint"],))
-                logger.warning("Une notification BUBUS n’a pas pu être envoyée.")
+                logger.warning("Notification BUBUS refusée (%s, HTTP %s).",
+                               type(exc).__name__, getattr(response, "status_code", None))
             with self._db() as db:
                 db.execute("UPDATE deliveries SET state=? WHERE rule_id=? AND endpoint=?", (state, *identity))
         with self._db() as db:
