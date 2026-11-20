@@ -152,7 +152,7 @@ _LOGIN_PAGE = """<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1a6354"><link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/assets/icon-192.png?v=chien"><title>BUBUS · Connexion</title>
+<link rel="icon" href="/assets/icon-192.png?v=crypto"><title>BUBUS · Connexion</title>
 <style>
 :root{{color-scheme:dark;--bg:#0f1716;--card:#16211f;--line:#2a3a37;--text:#eef4f2;--muted:#9fb2ad;--accent:#1f8a6f}}
 *{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);
@@ -166,7 +166,7 @@ background:#0c1312;color:var(--text)}}input:focus{{outline:2px solid var(--accen
 button{{width:100%;margin-top:22px;padding:14px;font-size:16px;font-weight:600;border:0;border-radius:12px;background:var(--accent);color:#fff}}
 .error{{margin-top:16px;padding:10px 12px;border-radius:10px;background:#3a1b1b;color:#ffd7d7;font-size:14px}}
 </style></head><body><main>
-<div class="brand"><img src="/assets/icon-192.png?v=chien" alt=""><div><h1>BUBUS</h1><p>Marchés et discussion, en lecture seule</p></div></div>
+<div class="brand"><img src="/assets/icon-192.png?v=crypto" alt=""><div><h1>BUBUS</h1><p>Marchés et discussion, en lecture seule</p></div></div>
 {error}
 <form method="post" action="/login" autocomplete="on">
 <label>Identifiant<input name="username" autocomplete="username" required maxlength="128" autocapitalize="none"></label>

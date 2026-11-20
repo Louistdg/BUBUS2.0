@@ -1,7 +1,7 @@
 // Service worker BUBUS : rend l'appli installable et garde l'interface en cache.
 // Les données (/api/...) ne sont jamais mises en cache : elles viennent toujours du serveur.
-const CACHE = 'bubus-shell-v5';
-const SHELL = ['/assets/desk.css', '/assets/desk.js', '/assets/icon-192.png?v=chien', '/assets/icon-512.png?v=chien', '/assets/icon-maskable-512.png?v=chien'];
+const CACHE = 'bubus-shell-v6';
+const SHELL = ['/assets/desk.css', '/assets/desk.js', '/assets/icon-192.png?v=crypto', '/assets/icon-512.png?v=crypto', '/assets/icon-maskable-512.png?v=crypto'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).catch(() => undefined));
