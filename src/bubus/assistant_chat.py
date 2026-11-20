@@ -315,11 +315,15 @@ def _call_claude(*, config: ChatConfig, system: str, messages: list[dict[str, st
     return text or "Je n'ai pas de réponse à donner. Reformule ta question."
 
 
-def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[dict[str, str]], snapshot: str) -> str:
+def _call_chat_completions(*, config: ChatConfig, system: str, messages: list[dict[str, str]], snapshot: str,
+                           max_tokens: int | None = None) -> str:
     name = PROVIDER_LABELS[config.provider]
     api_messages = [{"role": "system", "content": system}] + [dict(m) for m in messages[:-1]]
     api_messages.append({"role": "user", "content": snapshot + "\n\n" + messages[-1]["content"]})
-    body = json.dumps({"model": config.model, "messages": api_messages}).encode("utf-8")
+    payload = {"model": config.model, "messages": api_messages}
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(PROVIDERS[config.provider].endpoint, data=body, method="POST",
                                      headers={"Content-Type": "application/json", "X-Title": "BUBUS"})
     request.add_unredirected_header("Authorization", f"Bearer {config.api_key}")

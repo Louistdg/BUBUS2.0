@@ -20,8 +20,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from bubus.chatgpt_signin import ChatGPTSignIn, ChatGPTSignInError
+from bubus.assistant_chat import ChatConfig, DEFAULT_OPENROUTER_MODEL, _call_chat_completions
+from bubus.market_trial import MarketTrial
 from bubus.price_alerts import PriceAlerts
-from bubus.valuation import valuation
+from bubus.valuation import stock_market, valuation
 from bubus.server import ASSETS, DeskHandler, make_server
 
 
@@ -308,6 +310,9 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
             return self._login_page()
         if not self._authorized():
             return self._redirect("/login") if path == "/" else self._auth_required()
+        if path == "/api/desk/market-trial":
+            trial = getattr(self.server, "market_trial", None)
+            return self._send_json(200, trial.status()) if trial else self._send_json(404, {})
         if path == "/api/desk/price-alerts":
             alerts = getattr(self.server, "price_alerts", None)
             if alerts is None:
@@ -480,6 +485,22 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
 LOGIN_THROTTLE = LoginThrottle()
 
 
+def explain_trial(data):
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        raise ValueError("Clé OpenRouter indisponible.")
+    model = (os.environ.get("BUBUS_AI_MODEL") or DEFAULT_OPENROUTER_MODEL
+             if os.environ.get("BUBUS_AI_PROVIDER") == "openrouter" else DEFAULT_OPENROUTER_MODEL)
+    config = ChatConfig("openrouter", model, key, 24)
+    return _call_chat_completions(
+        config=config, max_tokens=420, snapshot=json.dumps(data, ensure_ascii=False),
+        system=("Résume les observations de marché en français simple. Classements descriptifs uniquement. "
+                "Ne conseille aucun achat ni vente. Ne prédis pas les prix. "
+                "Signale les données manquantes et les périodes sans nouvelles cotations."),
+        messages=[{"role": "user", "content": "Résume en quatre phrases ce qui ressort des deux classements."}],
+    )
+
+
 def main() -> int:
     if not os.environ.get("BUBUS_PREVIEW_USERNAME") or len(os.environ.get("BUBUS_PREVIEW_PASSWORD", "")) < 24:
         raise SystemExit("BUBUS en ligne exige un identifiant et un mot de passe d’au moins 24 caractères.")
@@ -497,6 +518,15 @@ def main() -> int:
     server.price_alerts = PriceAlerts(Path(volume) / "alerts", quote_source=valuation) if volume else None
     if server.price_alerts:
         server.price_alerts.start()
+    server.market_trial = None
+    if volume:
+        def crypto_quotes():
+            rows = server.coingecko_market_overview.get_overview()["markets"]
+            return sorted(rows, key=lambda row: float(row["volume_24h_usd"]), reverse=True)
+
+        server.market_trial = MarketTrial(Path(volume) / "market-trial",
+                                          {"crypto": crypto_quotes, "actions": stock_market}, explain_trial)
+        server.market_trial.start()
     print("BUBUS2.0 en ligne : marchés publics et discussion IA, en lecture seule.", flush=True)
     try:
         server.serve_forever(poll_interval=0.25)
@@ -505,6 +535,8 @@ def main() -> int:
     finally:
         if server.price_alerts:
             server.price_alerts.stop_event.set()
+        if server.market_trial:
+            server.market_trial.stop.set()
         server.server_close()
     return 0
 

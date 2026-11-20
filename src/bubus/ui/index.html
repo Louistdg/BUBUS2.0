@@ -46,6 +46,13 @@
           <div id="equity-quotes">Chargement des cours…</div>
         </section>
         <section class="card market-card"><div class="market-toolbar"><div class="tabs" role="group" aria-label="Source des marchés"><button data-source="exchange" hidden>Crypto.com <span>Spot</span></button><button data-source="coingecko" class="active">Cryptos <span>CoinGecko</span></button></div><div class="table-controls"><label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="Rechercher un actif…" aria-label="Rechercher un actif"></label><select id="sort" aria-label="Trier les marchés"><option value="volume">Volume décroissant</option><option value="gainers">Plus fortes hausses</option><option value="losers">Plus fortes baisses</option><option value="name">Nom A → Z</option></select></div></div><div class="table-scroll"><table><thead><tr><th class="favorite-col">☆</th><th>Actif / paire</th><th class="number">Dernier trade</th><th class="number">Variation 24 h</th><th class="number">Volume 24 h USD</th><th>Heure source</th></tr></thead><tbody id="market-rows"><tr><td colspan="6" class="table-empty">Connexion aux marchés publics…</td></tr></tbody></table></div><div class="table-footer"><span id="table-count">Aucun cours reçu</span><span id="table-attribution">Source : CoinGecko</span></div></section>
+        <section class="card ai-connections" id="market-trial" hidden>
+          <h2>Classement des marchés · 24 h</h2>
+          <p id="trial-period"></p>
+          <p class="microcopy">Score = variation observée moins le recul maximal, en points de pourcentage. Deux cotations distinctes sont nécessaires.</p>
+          <div id="trial-rankings"></div>
+          <p id="trial-report"></p>
+        </section>
         <div id="ai-home-slot">
           <section class="card ai-connections" id="ai-connections" aria-labelledby="ai-title">
             <h2 id="ai-title">Mes connexions IA</h2>

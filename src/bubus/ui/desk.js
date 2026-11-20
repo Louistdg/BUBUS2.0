@@ -307,6 +307,30 @@
     finally { button.disabled = false; }
   }
   $('rev-refresh').onclick = refreshRevolut;
+  async function loadMarketTrial() {
+    try {
+      const result = await api('/api/desk/market-trial');
+      const date = seconds => new Date(seconds * 1000).toLocaleString('fr-FR');
+      $('trial-period').textContent = date(result.started) + ' → ' + date(result.ends);
+      $('trial-rankings').replaceChildren(...[['crypto', 'Cryptos'], ['actions', 'Actions']].map(([kind, title]) => {
+        const section = node('section');
+        const list = node('ol');
+        for (const asset of result.ranking[kind]) {
+          list.append(node('li', `${asset.name} (${asset.symbol}) · variation ${asset.change} % · recul ${asset.drawdown} % · ${asset.quotes} cotations distinctes · ${asset.samples}/${result.target} relevés`));
+        }
+        section.append(node('h3', title), node('p', `${result.coverage[kind]}/${result.target} relevés · ${result.universe[kind]} actifs suivis`));
+        section.append(list.children.length ? list : node('p', 'En attente de nouvelles cotations.'));
+        return section;
+      }));
+      const report = result.report;
+      $('trial-report').textContent = report ? `OpenRouter · heure ${report.hour} : ${report.note || report.status}` :
+        'Première synthèse OpenRouter après une heure.';
+      $('market-trial').hidden = false;
+    } catch {}
+  }
+  setInterval(() => {
+    if (document.body.dataset.mode === 'cloud' && !document.hidden && location.hash === '#markets') loadMarketTrial();
+  }, 60000);
   function view(name) {
     if (!labels[name]) name = 'markets';
     if (name === 'chat' || name === 'markets') {
@@ -320,7 +344,10 @@
     if (name === 'watchlist') renderWatchlist();
     if (name === 'activity') loadActivity();
     if (name === 'autopilot') { loadRiskLimits(); loadRiskReadiness(); loadOrderChainAudit(); }
-    if (name === 'markets') requestAnimationFrame(drawChart);
+    if (name === 'markets') {
+      requestAnimationFrame(drawChart);
+      if (document.body.dataset.mode === 'cloud') loadMarketTrial();
+    }
     if (name === 'chat') loadChatState();
     if (name === 'portfolio') refreshRevolut();
   }
