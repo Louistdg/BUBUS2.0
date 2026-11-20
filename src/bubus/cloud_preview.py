@@ -20,6 +20,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from bubus.chatgpt_signin import ChatGPTSignIn, ChatGPTSignInError
+from bubus.price_alerts import PriceAlerts
+from bubus.valuation import valuation
 from bubus.server import ASSETS, DeskHandler, make_server
 
 
@@ -306,6 +308,11 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
             return self._login_page()
         if not self._authorized():
             return self._redirect("/login") if path == "/" else self._auth_required()
+        if path == "/api/desk/price-alerts":
+            alerts = getattr(self.server, "price_alerts", None)
+            if alerts is None:
+                return self._send_json(503, {"error": "Stockage des alertes indisponible."})
+            return self._send_json(200, alerts.list())
         if path not in _AUTHENTICATED_GET_PATHS:
             return self._send_json(404, {"error": "Cette route privée n’existe pas dans la version en ligne."})
         if path == "/":
@@ -388,6 +395,34 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
             return self._reject_post(503, "Connexion interrompue. Réessaie depuis la discussion.")
         return self._send_json(200, result)
 
+    def _price_alert_action(self):
+        if not self._same_site_write() or not session_token_valid(self._cookie(SESSION_COOKIE)):
+            self._drain_body(4096)
+            return self._reject_post(403, "Reconnecte-toi à BUBUS.")
+        alerts = getattr(self.server, "price_alerts", None)
+        if alerts is None:
+            self._drain_body(4096)
+            return self._reject_post(503, "Stockage des alertes indisponible.")
+        size = self.headers.get("Content-Length", "")
+        if (self.headers.get_content_type() != "application/json" or not size.isdecimal()
+                or len(size) > 4 or not 1 <= int(size) <= 4096):
+            return self._reject_post(400, "Demande d’alerte invalide.")
+        try:
+            data = json.loads(self.rfile.read(int(size)))
+            action = data["action"]
+            if action in ("add", "test"):
+                alerts.add(data, test=action == "test")
+            elif action == "remove" and isinstance(data["id"], str) and len(data["id"]) == 32:
+                alerts.remove(data["id"])
+            else:
+                raise ValueError("Action d’alerte inconnue.")
+        except (KeyError, TypeError, UnicodeError, AttributeError):
+            return self._reject_post(400, "Demande d’alerte invalide.")
+        except ValueError as exc:
+            return self._reject_post(400, str(exc) if str(exc).endswith(".") and len(str(exc)) < 100
+                                     else "Demande d’alerte invalide.")
+        return self._send_json(200, alerts.list())
+
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if path == "/login":
@@ -400,6 +435,8 @@ class AuthenticatedCloudPreviewHandler(DeskHandler):
         if not self._authorized():
             self._drain_body()
             return self._auth_required()
+        if path == "/api/desk/price-alerts":
+            return self._price_alert_action()
         if path == "/api/desk/ai-connections":
             if not self._same_site_write() or not session_token_valid(self._cookie(SESSION_COOKIE)):
                 return self._reject_post(403, "Ouvre cette action depuis ta session BUBUS.")
@@ -455,12 +492,17 @@ def main() -> int:
     server = make_server(port, data_dir=data_dir, bind_host="0.0.0.0",
                          handler_class=AuthenticatedCloudPreviewHandler, chatgpt_signin=hosted_chatgpt(data_dir),
                          ai_protector=_CloudTokenProtector("ai-keys/v1"))
+    server.price_alerts = PriceAlerts(Path(volume) / "alerts", quote_source=valuation) if volume else None
+    if server.price_alerts:
+        server.price_alerts.start()
     print("BUBUS2.0 en ligne : marchés publics et discussion IA, en lecture seule.", flush=True)
     try:
         server.serve_forever(poll_interval=0.25)
     except KeyboardInterrupt:
         pass
     finally:
+        if server.price_alerts:
+            server.price_alerts.stop_event.set()
         server.server_close()
     return 0
 
