@@ -63,10 +63,14 @@ class PriceAlertTests(unittest.TestCase):
         self.now += 24
         self.alerts.poll()
         self.assertFalse(self.messages)
-        self.now += 5
-        self.alerts.poll()
-        self.alerts.poll()
-        self.assertEqual([msg["title"] for msg in self.messages], ["BUBUS · Test"])
+        self.now += 6
+        for number in range(1, 4):
+            self.alerts.poll()
+            self.alerts.poll()
+            self.assertEqual(len(self.messages), number)
+            self.assertEqual(self.messages[-1]["title"], f"BUBUS · Test {number}/3")
+            self.now += 35
+        self.assertEqual(len({msg['tag'] for msg in self.messages}), 3)
 
     def test_rejects_untrusted_push_endpoint(self):
         invalid = {**SUBSCRIPTION, "endpoint":"https://fcm.googleapis.com.invalid/fcm/send/test-subscription"}

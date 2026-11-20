@@ -135,11 +135,18 @@ class PriceAlerts:
                 if exists:
                     return
             count = db.execute("SELECT count(*) FROM rules").fetchone()[0]
-            if count >= 100:
+            if count + (3 if test else 1) > 100:
                 raise ValueError("Limite d’alertes atteinte.")
-            db.execute("""INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
+            if test:
+                now = int(self.clock())
+                db.executemany("""INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)""",
+                               [(uuid4().hex, f"{index}/3", currency, direction, str(threshold),
+                                 json.dumps(target), side, stamp, now + delay)
+                                for index, delay in enumerate((30, 65, 100), start=1)])
+                return
+            db.execute("""INSERT INTO rules VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NULL)""",
                        (uuid4().hex, symbol, currency, direction, str(threshold), json.dumps(target),
-                        side, stamp, int(self.clock()) + 25 if test else None))
+                        side, stamp))
 
     @staticmethod
     def _side(price, threshold, direction):
@@ -175,7 +182,7 @@ class PriceAlerts:
             return
         body = ("Un seuil fictif a été franchi. Ce test n’envoie qu’une notification."
                 if rule["test_at"] else f'{rule["symbol"]} · seuil de {rule["threshold"]} {rule["currency"]} franchi.')
-        message = {"title": "BUBUS · Test" if rule["test_at"] else "BUBUS · Alerte de prix",
+        message = {"title": f'BUBUS · Test {rule["symbol"]}' if rule["test_at"] else "BUBUS · Alerte de prix",
                    "body": body, "tag": "bubus-price-" + rule["id"]}
         state = "sent"
         try:

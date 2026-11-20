@@ -75,7 +75,7 @@
     button.disabled = true;
     try {
       await alertApi({action:'test', subscription:pushSubscription});
-      alertStatus('Ferme BUBUS. Un franchissement fictif sera testé dans 25 à 45 secondes.');
+      alertStatus('Ferme BUBUS. Trois notifications numérotées arriveront à partir de 30 secondes, puis environ toutes les 35 secondes.');
     } catch (error) { alertStatus(error.message); }
     finally { button.disabled = false; }
   };
